@@ -19,7 +19,7 @@ VIDEO_LINKS = {
 }
 
 # 📄 PDF uniquement pour PC (mets ce fichier dans ton repo)
-REFUND_PDF_PC = "refund_pc.pdf"
+REFUND_PDF_PC = "tech_refund.pdf"
 
 TEXTS = {
     "fr": {
