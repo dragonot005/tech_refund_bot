@@ -8,6 +8,10 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 
 logging.basicConfig(level=logging.INFO)
 
+# ====== CONFIG ======
+BOT_VERSION = "v1.3"
+BOT_UPDATED = "13/02/2026"
+
 SUPPORT_1_USERNAME = "dragonot005"
 SUPPORT_2_USERNAME = "BruluxOnFlux"
 LINKTREE_URL = "https://linktr.ee/mooneytimz"
@@ -40,15 +44,21 @@ TEXTS = {
         "pc": "💻 PC",
         "iphone": "🍎 iPhone",
         "android": "🤖 Android",
+
         "btn_pdf": "📄 PDF",
         "btn_video": "🎥 Vidéo",
         "btn_script": "📜 Lien du script",
         "btn_support1": "🛠 Support Dragonot",
         "btn_support2": "🛠 Support Brulux",
         "btn_back": "⬅ Retour",
+
+        "btn_home": "🏠 Menu principal",
+        "btn_version": "🛠 Version du bot",
+
         "support_ready": "🎟 Ticket: {ticket}\nClique ci-dessous pour contacter le support :",
         "missing_file": "❌ Erreur : fichier introuvable.",
         "open_support": "➡️ Ouvrir le support",
+        "version_text": "🛠 *Version du bot*\n\n• Version: `{ver}`\n• Dernière MAJ: `{date}`",
     },
     "en": {
         "choose_lang": "Please choose your language:",
@@ -60,22 +70,27 @@ TEXTS = {
         "pc": "💻 PC",
         "iphone": "🍎 iPhone",
         "android": "🤖 Android",
+
         "btn_pdf": "📄 PDF",
         "btn_video": "🎥 Video",
         "btn_script": "📜 Script Link",
         "btn_support1": "🛠 Dragonot Support",
         "btn_support2": "🛠 Brulux Support",
         "btn_back": "⬅ Back",
+
+        "btn_home": "🏠 Main menu",
+        "btn_version": "🛠 Bot version",
+
         "support_ready": "🎟 Ticket: {ticket}\nClick below to contact support:",
         "missing_file": "❌ Error: file not found.",
         "open_support": "➡️ Open support",
+        "version_text": "🛠 *Bot version*\n\n• Version: `{ver}`\n• Last update: `{date}`",
     }
 }
 
-
+# ====== HELPERS ======
 def get_lang(context):
     return context.user_data.get("lang", "fr")
-
 
 def get_next_ticket():
     if not os.path.exists(TICKET_FILE):
@@ -99,11 +114,9 @@ def get_next_ticket():
 
     return f"{number:04d}"
 
-
 def get_user_identity(update):
     user = update.effective_user
     return f"@{user.username}" if user.username else f"User ID: {user.id}"
-
 
 def build_support_message(lang, tech_label, platform_label, update, ticket):
     now = datetime.now(ZoneInfo("Europe/Paris"))
@@ -134,35 +147,48 @@ def build_support_message(lang, tech_label, platform_label, update, ticket):
             f"User: {identity}"
         )
 
-
 def build_support_url(username, lang, tech_label, platform_label, update, ticket):
     msg = build_support_message(lang, tech_label, platform_label, update, ticket)
     return f"https://t.me/{username}?text={urllib.parse.quote(msg)}"
 
+def get_or_create_active_ticket(context, tech_key, platform_key):
+    active = context.user_data.get("active_ticket")
+    if active and active.get("tech") == tech_key and active.get("platform") == platform_key:
+        return active["ticket"]
 
+    ticket = get_next_ticket()
+    context.user_data["active_ticket"] = {
+        "ticket": ticket,
+        "tech": tech_key,
+        "platform": platform_key,
+    }
+    return ticket
+
+# ====== KEYBOARDS ======
 def lang_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
-        [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")]
+        [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")],
+        [InlineKeyboardButton("🛠 Version", callback_data="show_version")],
     ])
-
 
 def tech_keyboard(lang):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["tech_amazon"], callback_data="tech_amazon")],
         [InlineKeyboardButton(TEXTS[lang]["tech_apple"], callback_data="tech_apple")],
-        [InlineKeyboardButton(TEXTS[lang]["tech_refundall"], callback_data="tech_refundall")]
+        [InlineKeyboardButton(TEXTS[lang]["tech_refundall"], callback_data="tech_refundall")],
+        [InlineKeyboardButton(TEXTS[lang]["btn_version"], callback_data="show_version")],
+        [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
     ])
-
 
 def platform_keyboard(lang):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["pc"], callback_data="platform_pc")],
         [InlineKeyboardButton(TEXTS[lang]["iphone"], callback_data="platform_iphone")],
         [InlineKeyboardButton(TEXTS[lang]["android"], callback_data="platform_android")],
-        [InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="back_to_tech")]
+        [InlineKeyboardButton(TEXTS[lang]["btn_version"], callback_data="show_version")],
+        [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
     ])
-
 
 def actions_keyboard(lang, platform):
     keyboard = []
@@ -182,32 +208,45 @@ def actions_keyboard(lang, platform):
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], callback_data="support_brulux")
     ])
 
+    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_version"], callback_data="show_version")])
+    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")])
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
 
     return InlineKeyboardMarkup(keyboard)
 
+def version_keyboard(lang):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
+    ])
 
-def get_or_create_active_ticket(context, tech_key, platform_key):
-    active = context.user_data.get("active_ticket")
-    if active and active.get("tech") == tech_key and active.get("platform") == platform_key:
-        return active["ticket"]
-
-    ticket = get_next_ticket()
-    context.user_data["active_ticket"] = {
-        "ticket": ticket,
-        "tech": tech_key,
-        "platform": platform_key,
-    }
-    return ticket
-
-
+# ====== HANDLERS ======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
 
+async def go_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # reset navigation + ticket actif (tu reviens vraiment au début)
+    context.user_data.clear()
+    await update.callback_query.edit_message_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
+
+async def show_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # si langue pas encore choisie, on affiche en FR par défaut
+    lang = get_lang(context)
+    text = TEXTS[lang]["version_text"].format(ver=BOT_VERSION, date=BOT_UPDATED)
+    await update.callback_query.edit_message_text(text, reply_markup=version_keyboard(lang), parse_mode="Markdown")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    # Menu principal + version dispo partout
+    if query.data == "go_home":
+        await go_home(update, context)
+        return
+
+    if query.data == "show_version":
+        await show_version(update, context)
+        return
+
     lang = get_lang(context)
 
     # Langue -> Tech
@@ -241,11 +280,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # Retour tech
-    if query.data == "back_to_tech":
-        await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
-        return
-
     # PDF PC
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
@@ -275,7 +309,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             url = build_support_url(SUPPORT_2_USERNAME, lang, tech_label, platform_label, update, ticket)
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(TEXTS[lang]["open_support"], url=url)]
+            [InlineKeyboardButton(TEXTS[lang]["open_support"], url=url)],
+            [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
         ])
 
         await query.edit_message_text(
@@ -284,7 +319,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-
+# ====== MAIN ======
 if __name__ == "__main__":
     TOKEN = os.getenv("TELEGRAM_TOKEN")
     if not TOKEN:
