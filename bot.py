@@ -8,20 +8,16 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Supports + Linktree
 SUPPORT_1 = "https://t.me/dragonot005"
 SUPPORT_2 = "https://t.me/BruluxOnFlux"
 LINKTREE_URL = "https://linktr.ee/mooneytimz"
 
-# 🎥 Vidéos (par plateforme)
 VIDEO_LINKS = {
     "android": "https://drive.google.com/file/d/1_3Nv4BH-qlIMuDqLVml0Dk-3Eros7ydf/view",
     "iphone": "https://drive.google.com/file/d/1CFNR9oGKIwSnJZBrqc8JpJX4_qNlKwNY/view",
     "pc": "https://drive.google.com/file/d/1TL__w19MwPqOeIlXqrgmRGMc9EVJ60HV/view",
 }
 
-# 📄 PDFs PC (1 par service)
-# Mets ces fichiers dans ton dossier projet + sur GitHub
 TECH_PDF_PC = {
     "amazon": "tech_amazon.pdf",
     "apple": "tech_apple.pdf",
@@ -32,9 +28,9 @@ TEXTS = {
     "fr": {
         "choose_lang": "Please choose your language / Choisissez votre langue :",
         "choose_tech": "✅ Choisis ton service :",
-        "tech_amazon": "🟧 Tech Amazon",
+        "tech_amazon": "📦 Tech Amazon",
         "tech_apple": "🍎 Tech Apple",
-        "tech_refundall": "✅ Refund All",
+        "tech_refundall": "🎁 Tech Refund All (PayPal, Rbnb, PCS…)",
 
         "choose_platform": "📱 Choisis ta plateforme :",
         "pc": "💻 PC",
@@ -48,6 +44,7 @@ TEXTS = {
         "btn_support1": "🛠 Support Dragonot",
         "btn_support2": "🛠 Support Brulux",
         "btn_back": "⬅ Retour",
+        "btn_back_tech": "⬅ Retour (Tech)",
 
         "sent_pdf": "✅ Voici ton fichier.",
         "missing_file": "❌ Erreur : fichier introuvable.",
@@ -55,9 +52,9 @@ TEXTS = {
     "en": {
         "choose_lang": "Please choose your language / Choisissez votre langue :",
         "choose_tech": "✅ Choose your service:",
-        "tech_amazon": "🟧 Amazon Tech",
+        "tech_amazon": "📦 Amazon Tech",
         "tech_apple": "🍎 Apple Tech",
-        "tech_refundall": "✅ Refund All",
+        "tech_refundall": "🎁 Tech Refund All (PayPal, Rbnb, PCS…)",
 
         "choose_platform": "📱 Choose your platform:",
         "pc": "💻 PC",
@@ -71,6 +68,7 @@ TEXTS = {
         "btn_support1": "🛠 Dragonot Support",
         "btn_support2": "🛠 Brulux Support",
         "btn_back": "⬅ Back",
+        "btn_back_tech": "⬅ Back (Tech)",
 
         "sent_pdf": "✅ Here is your file.",
         "missing_file": "❌ Error: file not found.",
@@ -102,31 +100,28 @@ def platform_keyboard(lang: str):
         [InlineKeyboardButton(TEXTS[lang]["pc"], callback_data="platform_pc")],
         [InlineKeyboardButton(TEXTS[lang]["iphone"], callback_data="platform_iphone")],
         [InlineKeyboardButton(TEXTS[lang]["android"], callback_data="platform_android")],
+        [InlineKeyboardButton(TEXTS[lang]["btn_back_tech"], callback_data="back_to_tech")],
     ])
 
 
 def platform_actions_keyboard(lang: str, platform: str, tech: str):
     keyboard = []
 
-    # PDF uniquement si PC (et seulement si on a un PDF pour ce service)
+    # PDF uniquement sur PC
     if platform == "pc":
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_pdf"], callback_data="send_pdf_pc")])
 
-    # Vidéo
     video_url = VIDEO_LINKS.get(platform)
     if video_url:
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_video"], url=video_url)])
 
-    # Linktree
     keyboard.append([InlineKeyboardButton("🔗 Linktree", url=LINKTREE_URL)])
 
-    # Supports sur la même ligne
     keyboard.append([
         InlineKeyboardButton(TEXTS[lang]["btn_support1"], url=SUPPORT_1),
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], url=SUPPORT_2),
     ])
 
-    # Retour (retour plateformes)
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
 
     return InlineKeyboardMarkup(keyboard)
@@ -140,41 +135,36 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # 1) Choix langue -> choix service
+    # Choix langue
     if query.data.startswith("lang_"):
         lang = query.data.split("_", 1)[1]
         context.user_data["lang"] = lang
-        await query.edit_message_text(
-            TEXTS[lang]["choose_tech"],
-            reply_markup=tech_keyboard(lang),
-        )
+        await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
     lang = get_lang(context)
 
-    # 2) Choix service -> plateformes
+    # Retour vers choix Tech
+    if query.data == "back_to_tech":
+        await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
+        return
+
+    # Choix service
     if query.data.startswith("tech_"):
-        tech = query.data.split("_", 1)[1]  # amazon / apple / refundall
+        tech = query.data.split("_", 1)[1]
         context.user_data["tech"] = tech
-        await query.edit_message_text(
-            TEXTS[lang]["choose_platform"],
-            reply_markup=platform_keyboard(lang),
-        )
+        await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
     # Retour plateformes
     if query.data == "step_platform":
-        await query.edit_message_text(
-            TEXTS[lang]["choose_platform"],
-            reply_markup=platform_keyboard(lang),
-        )
+        await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # 3) Choix plateforme -> actions
+    # Choix plateforme
     if query.data.startswith("platform_"):
-        platform = query.data.split("_", 1)[1]  # pc/iphone/android
+        platform = query.data.split("_", 1)[1]
         context.user_data["platform"] = platform
-
         tech = context.user_data.get("tech", "refundall")
         label = TEXTS[lang].get(platform, platform)
 
@@ -185,27 +175,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 4) Envoi PDF (PC) selon le service choisi
+    # Envoi PDF selon service choisi
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
-        platform = context.user_data.get("platform", "pc")
-
-        if platform != "pc":
-            # sécurité : normalement impossible
-            return
-
         file_path = TECH_PDF_PC.get(tech)
 
         if not file_path or not os.path.exists(file_path):
             await query.message.reply_text(TEXTS[lang]["missing_file"])
             return
 
-        try:
-            with open(file_path, "rb") as f:
-                await query.message.reply_document(document=f, caption=TEXTS[lang]["sent_pdf"])
-        except Exception as e:
-            logging.exception("Erreur envoi PDF: %s", e)
-            await query.message.reply_text(TEXTS[lang]["missing_file"])
+        with open(file_path, "rb") as f:
+            await query.message.reply_document(document=f, caption=TEXTS[lang]["sent_pdf"])
         return
 
 
