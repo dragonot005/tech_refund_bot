@@ -166,6 +166,7 @@ def get_or_create_active_ticket(context, tech_key, platform_key):
 
 # ====== KEYBOARDS ======
 def lang_keyboard():
+    # ✅ Version seulement ici (au début)
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
         [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")],
@@ -173,20 +174,20 @@ def lang_keyboard():
     ])
 
 def tech_keyboard(lang):
+    # ❌ pas de bouton version ici
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["tech_amazon"], callback_data="tech_amazon")],
         [InlineKeyboardButton(TEXTS[lang]["tech_apple"], callback_data="tech_apple")],
         [InlineKeyboardButton(TEXTS[lang]["tech_refundall"], callback_data="tech_refundall")],
-        [InlineKeyboardButton(TEXTS[lang]["btn_version"], callback_data="show_version")],
         [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
     ])
 
 def platform_keyboard(lang):
+    # ❌ pas de bouton version ici
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["pc"], callback_data="platform_pc")],
         [InlineKeyboardButton(TEXTS[lang]["iphone"], callback_data="platform_iphone")],
         [InlineKeyboardButton(TEXTS[lang]["android"], callback_data="platform_android")],
-        [InlineKeyboardButton(TEXTS[lang]["btn_version"], callback_data="show_version")],
         [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
     ])
 
@@ -208,7 +209,7 @@ def actions_keyboard(lang, platform):
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], callback_data="support_brulux")
     ])
 
-    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_version"], callback_data="show_version")])
+    # ❌ pas de bouton version ici
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")])
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
 
@@ -224,12 +225,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
 
 async def go_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # reset navigation + ticket actif (tu reviens vraiment au début)
     context.user_data.clear()
     await update.callback_query.edit_message_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
 
 async def show_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # si langue pas encore choisie, on affiche en FR par défaut
     lang = get_lang(context)
     text = TEXTS[lang]["version_text"].format(ver=BOT_VERSION, date=BOT_UPDATED)
     await update.callback_query.edit_message_text(text, reply_markup=version_keyboard(lang), parse_mode="Markdown")
@@ -238,7 +237,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Menu principal + version dispo partout
     if query.data == "go_home":
         await go_home(update, context)
         return
@@ -249,7 +247,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = get_lang(context)
 
-    # Langue -> Tech
     if query.data.startswith("lang_"):
         context.user_data["lang"] = query.data.split("_")[1]
         lang = context.user_data["lang"]
@@ -257,14 +254,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
-    # Tech -> Plateforme
     if query.data.startswith("tech_"):
         context.user_data["tech"] = query.data.split("_")[1]
         context.user_data.pop("active_ticket", None)
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # Plateforme -> Actions
     if query.data.startswith("platform_"):
         platform = query.data.split("_")[1]
         context.user_data["platform"] = platform
@@ -275,12 +270,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Retour plateformes
     if query.data == "step_platform":
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # PDF PC
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
@@ -293,7 +286,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_document(f)
         return
 
-    # Support (ticket unique par demande)
     if query.data in ("support_dragonot", "support_brulux"):
         tech_key = context.user_data.get("tech", "refundall")
         platform_key = context.user_data.get("platform", "pc")
