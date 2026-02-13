@@ -8,17 +8,16 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-SUPPORT_URL = "https://t.me/dragonot005"
+SUPPORT_1 = "https://t.me/dragonot005"
+SUPPORT_2 = "https://t.me/BruluxOnFlux"
 LINKTREE_URL = "https://linktr.ee/mooneytimz"
 
-# 🎥 Liens vidéos (1 par plateforme)
 VIDEO_LINKS = {
     "android": "https://drive.google.com/file/d/1_3Nv4BH-qlIMuDqLVml0Dk-3Eros7ydf/view",
     "iphone": "https://drive.google.com/file/d/1CFNR9oGKIwSnJZBrqc8JpJX4_qNlKwNY/view",
     "pc": "https://drive.google.com/file/d/1TL__w19MwPqOeIlXqrgmRGMc9EVJ60HV/view",
 }
 
-# 📄 PDF uniquement pour PC (mets ce fichier dans ton repo)
 REFUND_PDF_PC = "tech_refund.pdf"
 
 TEXTS = {
@@ -26,7 +25,7 @@ TEXTS = {
         "choose_lang": "Please choose your language / Choisissez votre langue :",
         "intro": (
             "✅ Bienvenue chez *Tech Refund* !\n\n"
-            "Choisis ta plateforme pour accéder aux vidéos, au linktree et au support.\n\n"
+            "Choisis ta plateforme pour accéder aux vidéos et au support.\n\n"
             "Clique *Continuer* 👇"
         ),
         "continue": "➡️ Continuer",
@@ -37,16 +36,17 @@ TEXTS = {
         "platform_title": "📦 Plateforme : *{platform}*\nChoisis une action :",
         "btn_refund_pdf": "📄 PDF Refund",
         "btn_video": "🎥 Vidéo",
-        "btn_support": "🛠 Support",
+        "btn_support1": "🛠 Support 1",
+        "btn_support2": "🛠 Support 2",
         "btn_back": "⬅ Retour",
         "sent_refund": "✅ Voici ton PDF Refund.",
-        "missing_file": "❌ Erreur : le fichier est introuvable.",
+        "missing_file": "❌ Erreur : fichier introuvable.",
     },
     "en": {
         "choose_lang": "Please choose your language / Choisissez votre langue :",
         "intro": (
             "✅ Welcome to *Tech Refund*!\n\n"
-            "Choose your platform to access videos, linktree and support.\n\n"
+            "Choose your platform to access videos and support.\n\n"
             "Tap *Continue* 👇"
         ),
         "continue": "➡️ Continue",
@@ -57,95 +57,80 @@ TEXTS = {
         "platform_title": "📦 Platform: *{platform}*\nChoose an action:",
         "btn_refund_pdf": "📄 Refund PDF",
         "btn_video": "🎥 Video",
-        "btn_support": "🛠 Support",
+        "btn_support1": "🛠 Support 1",
+        "btn_support2": "🛠 Support 2",
         "btn_back": "⬅ Back",
         "sent_refund": "✅ Here is your Refund PDF.",
         "missing_file": "❌ Error: file not found.",
     },
 }
 
-
-def get_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
+def get_lang(context):
     return context.user_data.get("lang", "fr")
 
-
-def lang_keyboard() -> InlineKeyboardMarkup:
+def lang_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
         [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")],
     ])
 
-
-def continue_keyboard(lang: str) -> InlineKeyboardMarkup:
+def continue_keyboard(lang):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["continue"], callback_data="step_platform")]
     ])
 
-
-def platform_keyboard(lang: str) -> InlineKeyboardMarkup:
+def platform_keyboard(lang):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["pc"], callback_data="platform_pc")],
         [InlineKeyboardButton(TEXTS[lang]["iphone"], callback_data="platform_iphone")],
         [InlineKeyboardButton(TEXTS[lang]["android"], callback_data="platform_android")],
     ])
 
-
-def platform_actions_keyboard(lang: str, platform: str) -> InlineKeyboardMarkup:
+def platform_actions_keyboard(lang, platform):
     keyboard = []
 
-    # 📄 PDF uniquement pour PC
+    # PDF uniquement PC
     if platform == "pc":
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_refund_pdf"], callback_data="refund_pc")])
 
-    # 🎥 Vidéo (pour toutes plateformes)
+    # Vidéo
     video_url = VIDEO_LINKS.get(platform)
     if video_url:
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_video"], url=video_url)])
 
-    # 🔗 Linktree (pour toutes plateformes)
+    # Linktree
     keyboard.append([InlineKeyboardButton("🔗 Linktree", url=LINKTREE_URL)])
 
-    # 🛠 Support
-    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_support"], url=SUPPORT_URL)])
+    # 2 Supports
+    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_support1"], url=SUPPORT_1)])
+    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_support2"], url=SUPPORT_2)])
 
-    # ⬅ Retour
+    # Retour
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
 
     return InlineKeyboardMarkup(keyboard)
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
-
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Choix langue
     if query.data.startswith("lang_"):
-        lang = query.data.split("_", 1)[1]
+        lang = query.data.split("_")[1]
         context.user_data["lang"] = lang
-        await query.edit_message_text(
-            TEXTS[lang]["intro"],
-            reply_markup=continue_keyboard(lang),
-            parse_mode="Markdown"
-        )
+        await query.edit_message_text(TEXTS[lang]["intro"], reply_markup=continue_keyboard(lang), parse_mode="Markdown")
         return
 
     lang = get_lang(context)
 
-    # Menu plateformes
     if query.data == "step_platform":
-        await query.edit_message_text(
-            TEXTS[lang]["choose_platform"],
-            reply_markup=platform_keyboard(lang)
-        )
+        await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # Menu actions plateforme
     if query.data.startswith("platform_"):
-        platform = query.data.split("_", 1)[1]
+        platform = query.data.split("_")[1]
         label = TEXTS[lang].get(platform, platform)
         await query.edit_message_text(
             TEXTS[lang]["platform_title"].format(platform=label),
@@ -154,22 +139,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Envoi PDF PC uniquement
     if query.data == "refund_pc":
         if not os.path.exists(REFUND_PDF_PC):
             await query.message.reply_text(TEXTS[lang]["missing_file"])
             return
-        try:
-            with open(REFUND_PDF_PC, "rb") as f:
-                await query.message.reply_document(
-                    document=f,
-                    caption=TEXTS[lang]["sent_refund"]
-                )
-        except Exception as e:
-            logging.exception("Erreur envoi PDF: %s", e)
-            await query.message.reply_text(TEXTS[lang]["missing_file"])
-        return
-
+        with open(REFUND_PDF_PC, "rb") as f:
+            await query.message.reply_document(document=f, caption=TEXTS[lang]["sent_refund"])
 
 if __name__ == "__main__":
     TOKEN = os.getenv("TELEGRAM_TOKEN")
