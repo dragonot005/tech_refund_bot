@@ -2,6 +2,7 @@ import os
 import logging
 import urllib.parse
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -22,7 +23,7 @@ VIDEO_LINKS = {
     "pc": "https://drive.google.com/file/d/1TL__w19MwPqOeIlXqrgmRGMc9EVJ60HV/view",
 }
 
-# 📄 PDFs PC (1 par service) — fichiers à mettre dans le dossier projet
+# 📄 PDFs PC (1 par service)
 TECH_PDF_PC = {
     "amazon": "tech_amazon.pdf",
     "apple": "tech_apple.pdf",
@@ -105,7 +106,7 @@ def get_user_identity(update):
     return f"@{user.username}" if user.username else f"User ID: {user.id}"
 
 def build_support_message(lang, tech_label, platform_label, update, ticket):
-    now = datetime.now().strftime("%H:%M")
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%H:%M")
     identity = get_user_identity(update)
     flag = "🇫🇷" if lang == "fr" else "🇬🇧"
 
@@ -156,30 +157,38 @@ def platform_keyboard(lang):
 def actions_keyboard(lang, platform):
     keyboard = []
 
-    # PDF uniquement sur PC
     if platform == "pc":
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_pdf"], callback_data="send_pdf_pc")])
 
-    # Script button (PC+Android docs, iPhone dropbox)
     if platform in ["pc", "android"]:
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_script"], url=SCRIPT_LINK_DOCS)])
     elif platform == "iphone":
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_script"], url=SCRIPT_LINK_IPHONE)])
 
-    # Video
     video_url = VIDEO_LINKS.get(platform)
     if video_url:
         keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_video"], url=video_url)])
 
-    # Support callbacks (ticket uniquement au clic)
     keyboard.append([
         InlineKeyboardButton(TEXTS[lang]["btn_support1"], callback_data="support_dragonot"),
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], callback_data="support_brulux")
     ])
 
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
-
     return InlineKeyboardMarkup(keyboard)
+
+def get_or_create_active_ticket(context, tech_key, platform_key):
+    active = context.user_data.get("active_ticket")
+    if active and active.get("tech") == tech_key and active.get("platform") == platform_key:
+        return active["ticket"]
+
+    ticket = get_next_ticket()
+    context.user_data["active_ticket"] = {
+        "ticket": ticket,
+        "tech": tech_key,
+        "platform": platform_key,
+    }
+    return ticket
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
@@ -189,40 +198,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = get_lang(context)
 
-    # Langue -> Tech
     if query.data.startswith("lang_"):
         context.user_data["lang"] = query.data.split("_")[1]
         lang = context.user_data["lang"]
+        context.user_data.pop("active_ticket", None)
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
-    # Retour Tech
     if query.data == "back_to_tech":
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
-    # Tech -> Plateforme
     if query.data.startswith("tech_"):
         context.user_data["tech"] = query.data.split("_")[1]
+        context.user_data.pop("active_ticket", None)
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # Retour Plateforme
     if query.data == "step_platform":
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # Plateforme -> Actions
     if query.data.startswith("platform_"):
         platform = query.data.split("_")[1]
         context.user_data["platform"] = platform
+        context.user_data.pop("active_ticket", None)
         await query.edit_message_text(
             f"{TEXTS[lang]['choose_platform']} ({TEXTS[lang].get(platform, platform)})",
             reply_markup=actions_keyboard(lang, platform)
         )
         return
 
-    # PDF PC (selon Tech choisie)
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
@@ -235,7 +241,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_document(document=f)
         return
 
-    # Support (ticket au clic)
     if query.data in ("support_dragonot", "support_brulux"):
         tech_key = context.user_data.get("tech", "refundall")
         platform_key = context.user_data.get("platform", "pc")
@@ -243,7 +248,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tech_label = TEXTS[lang].get(f"tech_{tech_key}", tech_key)
         platform_label = TEXTS[lang].get(platform_key, platform_key)
 
-        ticket = get_next_ticket()
+        ticket = get_or_create_active_ticket(context, tech_key, platform_key)
 
         if query.data == "support_dragonot":
             url = build_support_url(SUPPORT_1_USERNAME, lang, tech_label, platform_label, update, ticket)
@@ -261,7 +266,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Retour menu actions
     if query.data == "back_to_actions":
         platform_key = context.user_data.get("platform", "pc")
         await query.edit_message_text(
