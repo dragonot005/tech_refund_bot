@@ -72,27 +72,38 @@ TEXTS = {
     }
 }
 
+
 def get_lang(context):
     return context.user_data.get("lang", "fr")
 
+
 def get_next_ticket():
     if not os.path.exists(TICKET_FILE):
-        with open(TICKET_FILE, "w") as f:
+        with open(TICKET_FILE, "w", encoding="utf-8") as f:
             f.write("0")
 
-    with open(TICKET_FILE, "r") as f:
-        number = int(f.read().strip())
+    try:
+        with open(TICKET_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+            number = int(raw) if raw else 0
+    except Exception:
+        number = 0
 
     number += 1
 
-    with open(TICKET_FILE, "w") as f:
-        f.write(str(number))
+    try:
+        with open(TICKET_FILE, "w", encoding="utf-8") as f:
+            f.write(str(number))
+    except Exception:
+        pass
 
     return f"{number:04d}"
+
 
 def get_user_identity(update):
     user = update.effective_user
     return f"@{user.username}" if user.username else f"User ID: {user.id}"
+
 
 def build_support_message(lang, tech_label, platform_label, update, ticket):
     now = datetime.now(ZoneInfo("Europe/Paris"))
@@ -100,9 +111,12 @@ def build_support_message(lang, tech_label, platform_label, update, ticket):
     time_now = now.strftime("%H:%M")
     identity = get_user_identity(update)
 
+    flag = "🇫🇷" if lang == "fr" else "🇬🇧"
+
     if lang == "fr":
         return (
             f"🎟 Ticket: {ticket}\n"
+            f"{flag} Demande Support\n\n"
             f"Date: {date_now}\n"
             f"Heure: {time_now}\n\n"
             f"Tech: {tech_label}\n"
@@ -112,6 +126,7 @@ def build_support_message(lang, tech_label, platform_label, update, ticket):
     else:
         return (
             f"🎟 Ticket: {ticket}\n"
+            f"{flag} Support Request\n\n"
             f"Date: {date_now}\n"
             f"Time: {time_now}\n\n"
             f"Tech: {tech_label}\n"
@@ -119,15 +134,18 @@ def build_support_message(lang, tech_label, platform_label, update, ticket):
             f"User: {identity}"
         )
 
+
 def build_support_url(username, lang, tech_label, platform_label, update, ticket):
     msg = build_support_message(lang, tech_label, platform_label, update, ticket)
     return f"https://t.me/{username}?text={urllib.parse.quote(msg)}"
+
 
 def lang_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
         [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")]
     ])
+
 
 def tech_keyboard(lang):
     return InlineKeyboardMarkup([
@@ -136,6 +154,7 @@ def tech_keyboard(lang):
         [InlineKeyboardButton(TEXTS[lang]["tech_refundall"], callback_data="tech_refundall")]
     ])
 
+
 def platform_keyboard(lang):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["pc"], callback_data="platform_pc")],
@@ -143,6 +162,7 @@ def platform_keyboard(lang):
         [InlineKeyboardButton(TEXTS[lang]["android"], callback_data="platform_android")],
         [InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="back_to_tech")]
     ])
+
 
 def actions_keyboard(lang, platform):
     keyboard = []
@@ -166,6 +186,7 @@ def actions_keyboard(lang, platform):
 
     return InlineKeyboardMarkup(keyboard)
 
+
 def get_or_create_active_ticket(context, tech_key, platform_key):
     active = context.user_data.get("active_ticket")
     if active and active.get("tech") == tech_key and active.get("platform") == platform_key:
@@ -179,26 +200,32 @@ def get_or_create_active_ticket(context, tech_key, platform_key):
     }
     return ticket
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     lang = get_lang(context)
 
+    # Langue -> Tech
     if query.data.startswith("lang_"):
         context.user_data["lang"] = query.data.split("_")[1]
+        lang = context.user_data["lang"]
         context.user_data.pop("active_ticket", None)
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
+    # Tech -> Plateforme
     if query.data.startswith("tech_"):
         context.user_data["tech"] = query.data.split("_")[1]
         context.user_data.pop("active_ticket", None)
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
+    # Plateforme -> Actions
     if query.data.startswith("platform_"):
         platform = query.data.split("_")[1]
         context.user_data["platform"] = platform
@@ -209,14 +236,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Retour plateformes
+    if query.data == "step_platform":
+        await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
+        return
+
+    # Retour tech
+    if query.data == "back_to_tech":
+        await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
+        return
+
+    # PDF PC
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
-        if file_path and os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                await query.message.reply_document(f)
+
+        if not file_path or not os.path.exists(file_path):
+            await query.message.reply_text(TEXTS[lang]["missing_file"])
+            return
+
+        with open(file_path, "rb") as f:
+            await query.message.reply_document(f)
         return
 
+    # Support (ticket unique par demande)
     if query.data in ("support_dragonot", "support_brulux"):
         tech_key = context.user_data.get("tech", "refundall")
         platform_key = context.user_data.get("platform", "pc")
@@ -241,9 +284,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+
 if __name__ == "__main__":
     TOKEN = os.getenv("TELEGRAM_TOKEN")
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.run_polling()
+    if not TOKEN:
+        print("ERREUR : TELEGRAM_TOKEN manquant !")
+    else:
+        app = Application.builder().token(TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CallbackQueryHandler(button_handler))
+        app.run_polling()
