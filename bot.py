@@ -1,5 +1,6 @@
 import os
 import logging
+import urllib.parse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -8,8 +9,8 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-SUPPORT_1 = "https://t.me/dragonot005"
-SUPPORT_2 = "https://t.me/BruluxOnFlux"
+SUPPORT_1_USERNAME = "dragonot005"
+SUPPORT_2_USERNAME = "BruluxOnFlux"
 LINKTREE_URL = "https://linktr.ee/mooneytimz"
 
 VIDEO_LINKS = {
@@ -80,6 +81,33 @@ def get_lang(context):
     return context.user_data.get("lang", "fr")
 
 
+def lang_flag(lang: str) -> str:
+    return "🇫🇷" if lang == "fr" else "🇬🇧"
+
+
+def tech_label(lang: str, tech: str) -> str:
+    # Label texte visible + emoji de la tech
+    key = f"tech_{tech}"
+    return TEXTS[lang].get(key, tech)
+
+
+def platform_label(lang: str, platform: str) -> str:
+    return TEXTS[lang].get(platform, platform)
+
+
+def support_prefill_text(lang: str, tech: str, platform: str) -> str:
+    flag = lang_flag(lang)
+    if lang == "fr":
+        return f"{flag} Support | Tech: {tech_label(lang, tech)} | Plateforme: {platform_label(lang, platform)}"
+    else:
+        return f"{flag} Support | Tech: {tech_label(lang, tech)} | Platform: {platform_label(lang, platform)}"
+
+
+def support_link(username: str, lang: str, tech: str, platform: str) -> str:
+    msg = support_prefill_text(lang, tech, platform)
+    return f"https://t.me/{username}?text={urllib.parse.quote(msg)}"
+
+
 def lang_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
@@ -117,9 +145,10 @@ def platform_actions_keyboard(lang: str, platform: str, tech: str):
 
     keyboard.append([InlineKeyboardButton("🔗 Linktree", url=LINKTREE_URL)])
 
+    # Supports sur la même ligne + message pré-rempli (lang + tech + platform)
     keyboard.append([
-        InlineKeyboardButton(TEXTS[lang]["btn_support1"], url=SUPPORT_1),
-        InlineKeyboardButton(TEXTS[lang]["btn_support2"], url=SUPPORT_2),
+        InlineKeyboardButton(TEXTS[lang]["btn_support1"], url=support_link(SUPPORT_1_USERNAME, lang, tech, platform)),
+        InlineKeyboardButton(TEXTS[lang]["btn_support2"], url=support_link(SUPPORT_2_USERNAME, lang, tech, platform)),
     ])
 
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
@@ -175,9 +204,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Envoi PDF selon service choisi
+    # Envoi PDF selon service choisi (PC)
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
+        platform = context.user_data.get("platform", "pc")
+
+        if platform != "pc":
+            return
+
         file_path = TECH_PDF_PC.get(tech)
 
         if not file_path or not os.path.exists(file_path):
