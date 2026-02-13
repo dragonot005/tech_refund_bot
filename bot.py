@@ -101,9 +101,11 @@ def platform_actions_keyboard(lang, platform):
     # Linktree
     keyboard.append([InlineKeyboardButton("🔗 Linktree", url=LINKTREE_URL)])
 
-    # Supports personnalisés
-    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_support1"], url=SUPPORT_1)])
-    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_support2"], url=SUPPORT_2)])
+       # Supports sur la même ligne
+    keyboard.append([
+        InlineKeyboardButton(TEXTS[lang]["btn_support1"], url=SUPPORT_1),
+        InlineKeyboardButton(TEXTS[lang]["btn_support2"], url=SUPPORT_2)
+    ])
 
     # Retour
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
