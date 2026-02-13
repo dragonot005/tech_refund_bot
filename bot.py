@@ -36,8 +36,8 @@ TEXTS = {
         "platform_title": "📦 Plateforme : *{platform}*\nChoisis une action :",
         "btn_refund_pdf": "📄 PDF Refund",
         "btn_video": "🎥 Vidéo",
-        "btn_support1": "🛠 Support 1",
-        "btn_support2": "🛠 Support 2",
+        "btn_support1": "🛠 Support Dragonot",
+        "btn_support2": "🛠 Support Brulux",
         "btn_back": "⬅ Retour",
         "sent_refund": "✅ Voici ton PDF Refund.",
         "missing_file": "❌ Erreur : fichier introuvable.",
@@ -57,8 +57,8 @@ TEXTS = {
         "platform_title": "📦 Platform: *{platform}*\nChoose an action:",
         "btn_refund_pdf": "📄 Refund PDF",
         "btn_video": "🎥 Video",
-        "btn_support1": "🛠 Support 1",
-        "btn_support2": "🛠 Support 2",
+        "btn_support1": "🛠 Dragonot Support",
+        "btn_support2": "🛠 Brulux Support",
         "btn_back": "⬅ Back",
         "sent_refund": "✅ Here is your Refund PDF.",
         "missing_file": "❌ Error: file not found.",
@@ -101,7 +101,7 @@ def platform_actions_keyboard(lang, platform):
     # Linktree
     keyboard.append([InlineKeyboardButton("🔗 Linktree", url=LINKTREE_URL)])
 
-    # 2 Supports
+    # Supports personnalisés
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_support1"], url=SUPPORT_1)])
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_support2"], url=SUPPORT_2)])
 
