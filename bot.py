@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v1.3"
+BOT_VERSION = "v1.4"
 BOT_UPDATED = "13/02/2026"
 
 SUPPORT_1_USERNAME = "dragonot005"
