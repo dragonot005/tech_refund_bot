@@ -11,7 +11,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v1.7"
+BOT_VERSION = "v1.8"
 BOT_UPDATED = "14/02/2026"
 
 SUPPORT_1_USERNAME = "dragonot005"
@@ -50,7 +50,8 @@ TEXTS = {
         "iphone": "🍎 iPhone",
         "android": "🤖 Android",
 
-        "btn_pdf": "📄 PDF",
+        # ✅ PDF -> Ebook
+        "btn_pdf": "📘 Ebook",
         "btn_video": "🎥 Vidéo",
         "btn_script": "📜 Lien du script",
         "btn_support1": "🛠 Support Dragonot",
@@ -59,9 +60,11 @@ TEXTS = {
         "btn_home": "🏠 Menu principal",
 
         "support_ready": "🎟 Ticket: {ticket}\nClique ci-dessous pour contacter le support :",
-        "missing_file": "❌ Erreur : fichier introuvable.",
-        "open_support": "➡️ Ouvrir le support",
 
+        # ✅ message ebook
+        "missing_file": "❌ Erreur : Ebook introuvable.",
+
+        "open_support": "➡️ Ouvrir le support",
         "version_text": "🛠 *Version du bot*\n\n• Version: `{ver}`\n• Dernière MAJ: `{date}`",
     },
     "en": {
@@ -75,7 +78,8 @@ TEXTS = {
         "iphone": "🍎 iPhone",
         "android": "🤖 Android",
 
-        "btn_pdf": "📄 PDF",
+        # ✅ PDF -> Ebook
+        "btn_pdf": "📘 Ebook",
         "btn_video": "🎥 Video",
         "btn_script": "📜 Script Link",
         "btn_support1": "🛠 Dragonot Support",
@@ -84,9 +88,11 @@ TEXTS = {
         "btn_home": "🏠 Main menu",
 
         "support_ready": "🎟 Ticket: {ticket}\nClick below to contact support:",
-        "missing_file": "❌ Error: file not found.",
-        "open_support": "➡️ Open support",
 
+        # ✅ message ebook
+        "missing_file": "❌ Error: Ebook not found.",
+
+        "open_support": "➡️ Open support",
         "version_text": "🛠 *Bot version*\n\n• Version: `{ver}`\n• Last update: `{date}`",
     }
 }
@@ -118,9 +124,6 @@ def init_db():
     conn.close()
 
 def create_ticket_in_db(user_id: int, username: str | None, lang: str, tech: str, platform: str) -> int:
-    """
-    Crée un ticket en DB et renvoie l'id (1,2,3...) => affichage 0001 via format.
-    """
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     created_at = paris_now().strftime("%Y-%m-%d %H:%M:%S")
@@ -255,11 +258,6 @@ def build_support_url(username, lang, tech_label, platform_label, update, ticket
     return f"https://t.me/{username}?text={urllib.parse.quote(msg)}"
 
 def get_or_create_active_ticket(context, update: Update, lang: str, tech_key: str, platform_key: str) -> str:
-    """
-    Ticket unique par demande (par session utilisateur) :
-    - si la personne reclique support sur la même tech+platform => même ticket
-    - sinon => nouveau ticket en DB
-    """
     active = context.user_data.get("active_ticket")
     if active and active.get("tech") == tech_key and active.get("platform") == platform_key:
         return active["ticket_str"]
@@ -281,7 +279,6 @@ def get_or_create_active_ticket(context, update: Update, lang: str, tech_key: st
 
 # ====== KEYBOARDS ======
 def lang_keyboard():
-    # Boutons uniquement au début: langue + version + stats
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
         [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")],
@@ -397,7 +394,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # PDF PC
+    # Ebook PC (ex PDF)
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
