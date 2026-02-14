@@ -11,7 +11,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v1.6"
+BOT_VERSION = "v1.4"
 BOT_UPDATED = "14/02/2026"
 
 SUPPORT_1_USERNAME = "dragonot005"
@@ -32,10 +32,10 @@ TECH_PDF_PC = {
     "refundall": "tech_refund.pdf",
 }
 
-# ✅ SQLite DB
+# ✅ SQLite
 DB_FILE = "tickets.db"
 
-# Stats
+# Stats (clics)
 STATS_FILE = "stats.json"
 
 TEXTS = {
@@ -56,7 +56,6 @@ TEXTS = {
         "btn_support1": "🛠 Support Dragonot",
         "btn_support2": "🛠 Support Brulux",
         "btn_back": "⬅ Retour",
-
         "btn_home": "🏠 Menu principal",
 
         "support_ready": "🎟 Ticket: {ticket}\nClique ci-dessous pour contacter le support :",
@@ -64,7 +63,6 @@ TEXTS = {
         "open_support": "➡️ Ouvrir le support",
 
         "version_text": "🛠 *Version du bot*\n\n• Version: `{ver}`\n• Dernière MAJ: `{date}`",
-        "stats_title": "📊 *Statistiques*",
     },
     "en": {
         "choose_lang": "Please choose your language:",
@@ -83,7 +81,6 @@ TEXTS = {
         "btn_support1": "🛠 Dragonot Support",
         "btn_support2": "🛠 Brulux Support",
         "btn_back": "⬅ Back",
-
         "btn_home": "🏠 Main menu",
 
         "support_ready": "🎟 Ticket: {ticket}\nClick below to contact support:",
@@ -91,7 +88,6 @@ TEXTS = {
         "open_support": "➡️ Open support",
 
         "version_text": "🛠 *Bot version*\n\n• Version: `{ver}`\n• Last update: `{date}`",
-        "stats_title": "📊 *Statistics*",
     }
 }
 
@@ -103,33 +99,41 @@ def start_text_dynamic():
     now = paris_now().strftime("%H:%M")
     return f"👋 Bienvenue ! Il est {now}.\n\nChoisissez votre langue :"
 
-# ====== SQLITE ======
+# ====== SQLITE DB ======
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tickets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TEXT
+            created_at TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            username TEXT,
+            lang TEXT NOT NULL,
+            tech TEXT NOT NULL,
+            platform TEXT NOT NULL
         )
     """)
     conn.commit()
     conn.close()
 
-def get_next_ticket():
+def create_ticket_in_db(user_id: int, username: str | None, lang: str, tech: str, platform: str) -> int:
+    """
+    Crée un ticket en DB et renvoie l'id (1,2,3...) => affichage 0001 via format.
+    """
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-
-    now = paris_now().strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("INSERT INTO tickets (created_at) VALUES (?)", (now,))
+    created_at = paris_now().strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute(
+        "INSERT INTO tickets (created_at, user_id, username, lang, tech, platform) VALUES (?, ?, ?, ?, ?, ?)",
+        (created_at, user_id, username, lang, tech, platform)
+    )
     conn.commit()
-
     ticket_id = cur.lastrowid
     conn.close()
+    return int(ticket_id)
 
-    return f"{ticket_id:04d}"
-
-def total_tickets_db():
+def total_tickets_db() -> int:
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM tickets")
@@ -137,7 +141,7 @@ def total_tickets_db():
     conn.close()
     return int(total)
 
-# ====== STATS ======
+# ====== STATS (clics) ======
 def _default_stats():
     return {
         "support_requests": 0,
@@ -250,17 +254,34 @@ def build_support_url(username, lang, tech_label, platform_label, update, ticket
     msg = build_support_message(lang, tech_label, platform_label, update, ticket)
     return f"https://t.me/{username}?text={urllib.parse.quote(msg)}"
 
-def get_or_create_active_ticket(context, tech_key, platform_key):
+def get_or_create_active_ticket(context, update: Update, lang: str, tech_key: str, platform_key: str) -> str:
+    """
+    Ticket unique par demande (par session utilisateur) :
+    - si la personne reclique support sur la même tech+platform => même ticket
+    - sinon => nouveau ticket en DB
+    """
     active = context.user_data.get("active_ticket")
     if active and active.get("tech") == tech_key and active.get("platform") == platform_key:
-        return active["ticket"]
+        return active["ticket_str"]
 
-    ticket = get_next_ticket()
-    context.user_data["active_ticket"] = {"ticket": ticket, "tech": tech_key, "platform": platform_key}
-    return ticket
+    user = update.effective_user
+    user_id = int(user.id)
+    username = user.username if user.username else None
+
+    ticket_id = create_ticket_in_db(user_id=user_id, username=username, lang=lang, tech=tech_key, platform=platform_key)
+    ticket_str = f"{ticket_id:04d}"
+
+    context.user_data["active_ticket"] = {
+        "ticket_id": ticket_id,
+        "ticket_str": ticket_str,
+        "tech": tech_key,
+        "platform": platform_key,
+    }
+    return ticket_str
 
 # ====== KEYBOARDS ======
 def lang_keyboard():
+    # Boutons uniquement au début: langue + version + stats
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
         [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")],
@@ -345,6 +366,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = get_lang(context)
 
+    # Langue -> Tech
     if query.data.startswith("lang_"):
         context.user_data["lang"] = query.data.split("_")[1]
         lang = context.user_data["lang"]
@@ -352,6 +374,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
+    # Tech -> Plateforme
     if query.data.startswith("tech_"):
         tech_key = query.data.split("_")[1]
         context.user_data["tech"] = tech_key
@@ -360,6 +383,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
+    # Plateforme -> Actions
     if query.data.startswith("platform_"):
         platform = query.data.split("_")[1]
         context.user_data["platform"] = platform
@@ -368,20 +392,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=actions_keyboard(lang, platform))
         return
 
+    # Retour plateformes
     if query.data == "step_platform":
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
+    # PDF PC
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
+
         if not file_path or not os.path.exists(file_path):
             await query.message.reply_text(TEXTS[lang]["missing_file"])
             return
+
         with open(file_path, "rb") as f:
             await query.message.reply_document(f)
         return
 
+    # Support (ticket SQLite + historique complet)
     if query.data in ("support_dragonot", "support_brulux"):
         tech_key = context.user_data.get("tech", "refundall")
         platform_key = context.user_data.get("platform", "pc")
@@ -389,20 +418,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tech_label = TEXTS[lang].get(f"tech_{tech_key}", tech_key)
         platform_label = TEXTS[lang].get(platform_key, platform_key)
 
-        ticket = get_or_create_active_ticket(context, tech_key, platform_key)
+        ticket_str = get_or_create_active_ticket(context, update, lang, tech_key, platform_key)
         inc_stat("support_requests")
 
         if query.data == "support_dragonot":
-            url = build_support_url(SUPPORT_1_USERNAME, lang, tech_label, platform_label, update, ticket)
+            url = build_support_url(SUPPORT_1_USERNAME, lang, tech_label, platform_label, update, ticket_str)
         else:
-            url = build_support_url(SUPPORT_2_USERNAME, lang, tech_label, platform_label, update, ticket)
+            url = build_support_url(SUPPORT_2_USERNAME, lang, tech_label, platform_label, update, ticket_str)
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(TEXTS[lang]["open_support"], url=url)],
             [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
         ])
 
-        await query.edit_message_text(TEXTS[lang]["support_ready"].format(ticket=ticket), reply_markup=keyboard)
+        await query.edit_message_text(TEXTS[lang]["support_ready"].format(ticket=ticket_str), reply_markup=keyboard)
         return
 
 # ====== MAIN ======
