@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import urllib.parse
 from datetime import datetime
@@ -9,7 +10,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v1.4"
+BOT_VERSION = "v1.3"
 BOT_UPDATED = "13/02/2026"
 
 SUPPORT_1_USERNAME = "dragonot005"
@@ -32,10 +33,11 @@ TECH_PDF_PC = {
 }
 
 TICKET_FILE = "ticket_counter.txt"
+STATS_FILE = "stats.json"
 
 TEXTS = {
     "fr": {
-        "choose_lang": "Choisissez votre langue / Please choose your language :",
+        "choose_lang": "Choisissez votre langue :",
         "choose_tech": "Choisis ton service :",
         "tech_amazon": "📦 Tech Amazon",
         "tech_apple": "🍎 Tech Apple",
@@ -54,10 +56,12 @@ TEXTS = {
 
         "btn_home": "🏠 Menu principal",
         "btn_version": "🛠 Version du bot",
+        "btn_stats": "📊 Statistiques",
 
         "support_ready": "🎟 Ticket: {ticket}\nClique ci-dessous pour contacter le support :",
         "missing_file": "❌ Erreur : fichier introuvable.",
         "open_support": "➡️ Ouvrir le support",
+
         "version_text": "🛠 *Version du bot*\n\n• Version: `{ver}`\n• Dernière MAJ: `{date}`",
     },
     "en": {
@@ -80,15 +84,74 @@ TEXTS = {
 
         "btn_home": "🏠 Main menu",
         "btn_version": "🛠 Bot version",
+        "btn_stats": "📊 Statistics",
 
         "support_ready": "🎟 Ticket: {ticket}\nClick below to contact support:",
         "missing_file": "❌ Error: file not found.",
         "open_support": "➡️ Open support",
+
         "version_text": "🛠 *Bot version*\n\n• Version: `{ver}`\n• Last update: `{date}`",
     }
 }
 
+# ====== STATS ======
+def _default_stats():
+    return {
+        "support_requests": 0,
+        "tech_clicks": {"amazon": 0, "apple": 0, "refundall": 0},
+        "platform_clicks": {"pc": 0, "iphone": 0, "android": 0},
+    }
+
+def load_stats():
+    if not os.path.exists(STATS_FILE):
+        return _default_stats()
+    try:
+        with open(STATS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # merge safe
+        base = _default_stats()
+        base.update({k: data.get(k, base[k]) for k in base})
+        # ensure subkeys exist
+        for k in base["tech_clicks"]:
+            base["tech_clicks"][k] = int(data.get("tech_clicks", {}).get(k, base["tech_clicks"][k]))
+        for k in base["platform_clicks"]:
+            base["platform_clicks"][k] = int(data.get("platform_clicks", {}).get(k, base["platform_clicks"][k]))
+        base["support_requests"] = int(data.get("support_requests", base["support_requests"]))
+        return base
+    except Exception:
+        return _default_stats()
+
+def save_stats(stats):
+    try:
+        with open(STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump(stats, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def inc_stat(kind, key=None):
+    stats = load_stats()
+    if kind == "support_requests":
+        stats["support_requests"] += 1
+    elif kind == "tech_clicks" and key in stats["tech_clicks"]:
+        stats["tech_clicks"][key] += 1
+    elif kind == "platform_clicks" and key in stats["platform_clicks"]:
+        stats["platform_clicks"][key] += 1
+    save_stats(stats)
+
+def read_total_ticket_counter():
+    if not os.path.exists(TICKET_FILE):
+        return 0
+    try:
+        with open(TICKET_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+            return int(raw) if raw else 0
+    except Exception:
+        return 0
+
 # ====== HELPERS ======
+def paris_now():
+    return datetime.now(ZoneInfo("Europe/Paris"))
+
 def get_lang(context):
     return context.user_data.get("lang", "fr")
 
@@ -118,8 +181,12 @@ def get_user_identity(update):
     user = update.effective_user
     return f"@{user.username}" if user.username else f"User ID: {user.id}"
 
+def get_user_display(update):
+    user = update.effective_user
+    return user.first_name if user and user.first_name else "Utilisateur"
+
 def build_support_message(lang, tech_label, platform_label, update, ticket):
-    now = datetime.now(ZoneInfo("Europe/Paris"))
+    now = paris_now()
     date_now = now.strftime("%d/%m/%Y")
     time_now = now.strftime("%H:%M")
     identity = get_user_identity(update)
@@ -166,15 +233,14 @@ def get_or_create_active_ticket(context, tech_key, platform_key):
 
 # ====== KEYBOARDS ======
 def lang_keyboard():
-    # ✅ Version seulement ici (au début)
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Français 🇫🇷", callback_data="lang_fr")],
         [InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")],
         [InlineKeyboardButton("🛠 Version", callback_data="show_version")],
+        [InlineKeyboardButton("📊 Stats", callback_data="show_stats")],
     ])
 
 def tech_keyboard(lang):
-    # ❌ pas de bouton version ici
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["tech_amazon"], callback_data="tech_amazon")],
         [InlineKeyboardButton(TEXTS[lang]["tech_apple"], callback_data="tech_apple")],
@@ -183,7 +249,6 @@ def tech_keyboard(lang):
     ])
 
 def platform_keyboard(lang):
-    # ❌ pas de bouton version ici
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["pc"], callback_data="platform_pc")],
         [InlineKeyboardButton(TEXTS[lang]["iphone"], callback_data="platform_iphone")],
@@ -209,29 +274,72 @@ def actions_keyboard(lang, platform):
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], callback_data="support_brulux")
     ])
 
-    # ❌ pas de bouton version ici
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")])
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
-
     return InlineKeyboardMarkup(keyboard)
 
-def version_keyboard(lang):
+def simple_back_home(lang):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
     ])
 
+# ====== SCREENS ======
+def start_text_dynamic():
+    now = paris_now().strftime("%H:%M")
+    # on met un message simple et pro
+    return f"👋 Bienvenue ! Il est {now}.\n\nChoisissez votre langue :"
+
+def stats_text(lang):
+    stats = load_stats()
+    total = read_total_ticket_counter()
+
+    if lang == "fr":
+        return (
+            "📊 *Statistiques*\n\n"
+            f"Tickets total (compteur): `{total}`\n"
+            f"Demandes support: `{stats['support_requests']}`\n\n"
+            "*Clics par Tech*\n"
+            f"📦 Amazon: `{stats['tech_clicks']['amazon']}`\n"
+            f"🍎 Apple: `{stats['tech_clicks']['apple']}`\n"
+            f"🎁 Refund All: `{stats['tech_clicks']['refundall']}`\n\n"
+            "*Clics par Plateforme*\n"
+            f"💻 PC: `{stats['platform_clicks']['pc']}`\n"
+            f"🍎 iPhone: `{stats['platform_clicks']['iphone']}`\n"
+            f"🤖 Android: `{stats['platform_clicks']['android']}`"
+        )
+    else:
+        return (
+            "📊 *Statistics*\n\n"
+            f"Total tickets (counter): `{total}`\n"
+            f"Support requests: `{stats['support_requests']}`\n\n"
+            "*Clicks by Tech*\n"
+            f"📦 Amazon: `{stats['tech_clicks']['amazon']}`\n"
+            f"🍎 Apple: `{stats['tech_clicks']['apple']}`\n"
+            f"🎁 Refund All: `{stats['tech_clicks']['refundall']}`\n\n"
+            "*Clicks by Platform*\n"
+            f"💻 PC: `{stats['platform_clicks']['pc']}`\n"
+            f"🍎 iPhone: `{stats['platform_clicks']['iphone']}`\n"
+            f"🤖 Android: `{stats['platform_clicks']['android']}`"
+        )
+
 # ====== HANDLERS ======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
+    # accueil dynamique (heure FR)
+    await update.message.reply_text(start_text_dynamic(), reply_markup=lang_keyboard())
 
 async def go_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    await update.callback_query.edit_message_text(TEXTS["fr"]["choose_lang"], reply_markup=lang_keyboard())
+    await update.callback_query.edit_message_text(start_text_dynamic(), reply_markup=lang_keyboard())
 
 async def show_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = get_lang(context)
     text = TEXTS[lang]["version_text"].format(ver=BOT_VERSION, date=BOT_UPDATED)
-    await update.callback_query.edit_message_text(text, reply_markup=version_keyboard(lang), parse_mode="Markdown")
+    await update.callback_query.edit_message_text(text, reply_markup=simple_back_home(lang), parse_mode="Markdown")
+
+async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = get_lang(context)
+    text = stats_text(lang)
+    await update.callback_query.edit_message_text(text, reply_markup=simple_back_home(lang), parse_mode="Markdown")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -245,8 +353,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_version(update, context)
         return
 
+    if query.data == "show_stats":
+        await show_stats(update, context)
+        return
+
     lang = get_lang(context)
 
+    # Langue -> Tech
     if query.data.startswith("lang_"):
         context.user_data["lang"] = query.data.split("_")[1]
         lang = context.user_data["lang"]
@@ -254,26 +367,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
+    # Tech -> Plateforme (+ stats)
     if query.data.startswith("tech_"):
-        context.user_data["tech"] = query.data.split("_")[1]
+        tech_key = query.data.split("_")[1]
+        context.user_data["tech"] = tech_key
         context.user_data.pop("active_ticket", None)
+        inc_stat("tech_clicks", tech_key)
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
+    # Plateforme -> Actions (+ stats)
     if query.data.startswith("platform_"):
         platform = query.data.split("_")[1]
         context.user_data["platform"] = platform
         context.user_data.pop("active_ticket", None)
-        await query.edit_message_text(
-            TEXTS[lang]["choose_platform"],
-            reply_markup=actions_keyboard(lang, platform)
-        )
+        inc_stat("platform_clicks", platform)
+        await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=actions_keyboard(lang, platform))
         return
 
+    # Retour plateformes
     if query.data == "step_platform":
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
+    # PDF PC
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
@@ -286,6 +403,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_document(f)
         return
 
+    # Support (ticket unique par demande) (+ stats)
     if query.data in ("support_dragonot", "support_brulux"):
         tech_key = context.user_data.get("tech", "refundall")
         platform_key = context.user_data.get("platform", "pc")
@@ -294,6 +412,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         platform_label = TEXTS[lang].get(platform_key, platform_key)
 
         ticket = get_or_create_active_ticket(context, tech_key, platform_key)
+        inc_stat("support_requests")
 
         if query.data == "support_dragonot":
             url = build_support_url(SUPPORT_1_USERNAME, lang, tech_label, platform_label, update, ticket)
@@ -305,10 +424,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
         ])
 
-        await query.edit_message_text(
-            TEXTS[lang]["support_ready"].format(ticket=ticket),
-            reply_markup=keyboard
-        )
+        await query.edit_message_text(TEXTS[lang]["support_ready"].format(ticket=ticket), reply_markup=keyboard)
         return
 
 # ====== MAIN ======
