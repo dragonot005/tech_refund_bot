@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v2"
+BOT_VERSION = "v2.1"
 BOT_UPDATED = "15/02/2026"
 
 SUPPORT_1_USERNAME = "Drago_JS"
@@ -360,7 +360,7 @@ def simple_back_home(lang):
     return InlineKeyboardMarkup([[InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")]])
 
 def faq_menu_keyboard(lang):
-    # menu FAQ complet, clean
+    # menu FAQ complet, avec bouton support DragoJS
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💻 PC (Edge)", callback_data="faq_pc")],
         [InlineKeyboardButton("🤖 Android (Firefox)", callback_data="faq_android")],
@@ -371,6 +371,8 @@ def faq_menu_keyboard(lang):
         [InlineKeyboardButton("⏳ Délai", callback_data="faq_time")],
         [InlineKeyboardButton("💳 Paiement", callback_data="faq_pay")],
         [InlineKeyboardButton("⚠️ Ça marche pas", callback_data="faq_notwork")],
+        # Nouveau bouton support DragoJS
+        [InlineKeyboardButton("🛠 Support DragoJS", callback_data="faq_support_drago")],
         [InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="faq_back_to_actions")],
     ])
 
@@ -491,10 +493,39 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=actions_keyboard(lang, platform))
         return
 
-    if query.data.startswith("faq_"):
+    if query.data.startswith("faq_") and not query.data == "faq_support_drago":
         key = query.data.split("_", 1)[1]  # pc/android/iphone/ebook/button/ticket/time/pay/notwork
         text = FAQ.get(lang, FAQ["fr"]).get(key, "FAQ indisponible.")
         await query.edit_message_text(text, reply_markup=faq_answer_keyboard(lang))
+        return
+
+    # ====== FAQ Support DragoJS ======
+    if query.data == "faq_support_drago":
+        # Récupérer les infos ou utiliser des valeurs par défaut
+        tech_key = context.user_data.get("tech", "refundall")
+        platform_key = context.user_data.get("platform", "pc")
+        
+        tech_label = TEXTS[lang].get(f"tech_{tech_key}", tech_key)
+        platform_label = TEXTS[lang].get(platform_key, platform_key)
+        
+        # Créer un ticket
+        ticket_str = get_or_create_active_ticket(context, update, lang, tech_key, platform_key)
+        inc_stat("support_requests")
+        
+        # Construire l'URL pour DragoJS
+        url = build_support_url(SUPPORT_1_USERNAME, lang, tech_label, platform_label, update, ticket_str)
+        
+        # Clavier avec le lien et retour
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(TEXTS[lang]["open_support"], url=url)],
+            [InlineKeyboardButton("⬅ Retour FAQ", callback_data="faq_menu")],
+            [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
+        ])
+        
+        await query.edit_message_text(
+            TEXTS[lang]["support_ready"].format(ticket=ticket_str),
+            reply_markup=keyboard
+        )
         return
 
 # ====== MAIN ======
