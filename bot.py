@@ -5,13 +5,15 @@ import logging
 import urllib.parse
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from typing import Optional
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v1.9"
+BOT_VERSION = "v2"
 BOT_UPDATED = "15/02/2026"
 
 SUPPORT_1_USERNAME = "Drago_JS"
@@ -52,6 +54,7 @@ TEXTS = {
         "btn_script": "📜 Lien du script",
         "btn_support1": "🛠 Support Drago",
         "btn_support2": "🛠 Support Brulux",
+        "btn_faq": "❓ FAQ",
         "btn_back": "⬅ Retour",
         "btn_home": "🏠 Menu principal",
 
@@ -60,6 +63,9 @@ TEXTS = {
         "open_support": "➡️ Ouvrir le support",
 
         "version_text": "🛠 *Version du bot*\n\n• Version: `{ver}`\n• Dernière MAJ: `{date}`",
+
+        "faq_title": "❓ FAQ – Questions fréquentes",
+        "faq_back": "⬅ Retour FAQ",
     },
     "en": {
         "choose_tech": "Choose your service:",
@@ -77,6 +83,7 @@ TEXTS = {
         "btn_script": "📜 Script Link",
         "btn_support1": "🛠 Drago Support",
         "btn_support2": "🛠 Brulux Support",
+        "btn_faq": "❓ FAQ",
         "btn_back": "⬅ Back",
         "btn_home": "🏠 Main menu",
 
@@ -85,6 +92,9 @@ TEXTS = {
         "open_support": "➡️ Open support",
 
         "version_text": "🛠 *Bot version*\n\n• Version: `{ver}`\n• Last update: `{date}`",
+
+        "faq_title": "❓ FAQ – Frequently Asked Questions",
+        "faq_back": "⬅ Back to FAQ",
     }
 }
 
@@ -94,7 +104,7 @@ def paris_now():
 
 def start_text_dynamic():
     now = paris_now().strftime("%H:%M")
-    return f"👋 Bienvenue ! Il est {now}.\n\nChoisissez votre langue :"
+    return f"👋 Bienvenue ! Il est {now}.\n\nPlease choose your language / Choisissez votre langue :"
 
 # ====== SQLITE (historique complet) ======
 def init_db():
@@ -114,7 +124,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-def create_ticket_in_db(user_id: int, username: str | None, lang: str, tech: str, platform: str) -> int:
+def create_ticket_in_db(user_id: int, username: Optional[str], lang: str, tech: str, platform: str) -> int:
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     created_at = paris_now().strftime("%Y-%m-%d %H:%M:%S")
@@ -270,6 +280,32 @@ def get_or_create_active_ticket(context, update: Update, lang: str, tech_key: st
     }
     return ticket_str
 
+# ====== FAQ CONTENT ======
+FAQ = {
+    "fr": {
+        "pc": "💻 Problème PC (Edge)\n\n• Utilise Microsoft Edge\n• Désactive les extensions inutiles\n• Lis l’Ebook entièrement avant de commencer\n\nSi cela ne fonctionne pas :\nRedémarre Edge puis recommence.",
+        "android": "🤖 Problème Android (Firefox)\n\n• Utilise Firefox\n• Autorise les téléchargements\n• Suis la vidéo Android étape par étape\n\nSi le script ne s’ouvre pas :\nVide le cache de Firefox puis réessaie.",
+        "iphone": "🍎 Problème iPhone (Safari)\n\n• Utilise Safari\n• Active les options nécessaires si demandé\n• Regarde la vidéo iPhone entièrement\n\nEnsuite recommence calmement.",
+        "ebook": "📘 Je ne trouve pas l’Ebook\n\nL’Ebook est disponible uniquement sur PC.\n\nSi tu es sur mobile :\nUtilise la vidéo ou le lien du script adapté.",
+        "button": "🔘 Le bouton ne fonctionne pas\n\nFerme le bot.\nRelance avec /start.\nRefais le parcours étape par étape.\n\nSi le problème continue, contacte le support.",
+        "ticket": "🎟 Question Ticket\n\n• Garde le même ticket pour la même demande\n• Envoie toujours ton numéro de ticket\n• Décris clairement ton problème\n\nCela accélère la réponse.",
+        "time": "⏳ Combien de temps pour une réponse ?\n\nLe support répond le plus rapidement possible selon l’affluence.\n\nMerci de rester patient.",
+        "pay": "💳 Dois-je payer quelque chose ?\n\nNon.\n\nLe bot fournit uniquement des guides et ressources.\nAucun paiement n’est demandé directement ici.",
+        "notwork": "⚠️ Pourquoi cela ne fonctionne pas chez moi ?\n\nChaque appareil est différent :\nversion système, navigateur, configuration…\n\nSi cela ne fonctionne pas, ouvre un ticket support.",
+    },
+    "en": {
+        "pc": "💻 PC Issue (Edge)\n\n• Use Microsoft Edge\n• Disable unnecessary extensions\n• Read the Ebook completely before starting\n\nIf it still fails:\nRestart Edge and try again.",
+        "android": "🤖 Android Issue (Firefox)\n\n• Use Firefox\n• Allow downloads\n• Follow the Android video step by step\n\nIf the script doesn’t open:\nClear Firefox cache and try again.",
+        "iphone": "🍎 iPhone Issue (Safari)\n\n• Use Safari\n• Enable required options if requested\n• Watch the full iPhone video\n\nThen restart calmly.",
+        "ebook": "📘 I can't find the Ebook\n\nThe Ebook is available on PC only.\n\nIf you are on mobile:\nUse the video or the script link.",
+        "button": "🔘 Button not working\n\nClose the bot.\nRestart with /start.\nFollow the steps carefully.\n\nIf it continues, contact support.",
+        "ticket": "🎟 Ticket Question\n\n• Keep the same ticket for the same request\n• Always provide your ticket number\n• Clearly describe your issue\n\nThis helps us respond faster.",
+        "time": "⏳ How long for a response?\n\nSupport replies as quickly as possible depending on demand.\n\nThank you for your patience.",
+        "pay": "💳 Do I need to pay?\n\nNo.\n\nThe bot only provides guides and resources.\nNo payment is requested here.",
+        "notwork": "⚠️ Why doesn’t it work for me?\n\nEvery device is different:\nsystem version, browser, configuration…\n\nIf it still fails, open a support ticket.",
+    }
+}
+
 # ====== KEYBOARDS ======
 def lang_keyboard():
     return InlineKeyboardMarkup([
@@ -313,13 +349,35 @@ def actions_keyboard(lang, platform):
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], callback_data="support_brulux")
     ])
 
+    # ✅ FAQ
+    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_faq"], callback_data="faq_menu")])
+
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")])
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="step_platform")])
     return InlineKeyboardMarkup(keyboard)
 
 def simple_back_home(lang):
+    return InlineKeyboardMarkup([[InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")]])
+
+def faq_menu_keyboard(lang):
+    # menu FAQ complet, clean
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")]
+        [InlineKeyboardButton("💻 PC (Edge)", callback_data="faq_pc")],
+        [InlineKeyboardButton("🤖 Android (Firefox)", callback_data="faq_android")],
+        [InlineKeyboardButton("🍎 iPhone (Safari)", callback_data="faq_iphone")],
+        [InlineKeyboardButton("📘 Ebook", callback_data="faq_ebook")],
+        [InlineKeyboardButton("🔘 Bouton", callback_data="faq_button")],
+        [InlineKeyboardButton("🎟 Ticket", callback_data="faq_ticket")],
+        [InlineKeyboardButton("⏳ Délai", callback_data="faq_time")],
+        [InlineKeyboardButton("💳 Paiement", callback_data="faq_pay")],
+        [InlineKeyboardButton("⚠️ Ça marche pas", callback_data="faq_notwork")],
+        [InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="faq_back_to_actions")],
+    ])
+
+def faq_answer_keyboard(lang):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(TEXTS[lang]["faq_back"], callback_data="faq_menu")],
+        [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
     ])
 
 # ====== HANDLERS ======
@@ -358,6 +416,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = get_lang(context)
 
+    # ====== Language ======
     if query.data.startswith("lang_"):
         context.user_data["lang"] = query.data.split("_")[1]
         lang = context.user_data["lang"]
@@ -365,6 +424,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
+    # ====== Tech ======
     if query.data.startswith("tech_"):
         tech_key = query.data.split("_")[1]
         context.user_data["tech"] = tech_key
@@ -373,6 +433,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
+    # ====== Platform ======
     if query.data.startswith("platform_"):
         platform = query.data.split("_")[1]
         context.user_data["platform"] = platform
@@ -385,6 +446,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
+    # ====== Ebook (PC only) ======
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
@@ -395,6 +457,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_document(f)
         return
 
+    # ====== Support ======
     if query.data in ("support_drago", "support_brulux"):
         tech_key = context.user_data.get("tech", "refundall")
         platform_key = context.user_data.get("platform", "pc")
@@ -416,6 +479,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
 
         await query.edit_message_text(TEXTS[lang]["support_ready"].format(ticket=ticket_str), reply_markup=keyboard)
+        return
+
+    # ====== FAQ ======
+    if query.data == "faq_menu":
+        await query.edit_message_text(TEXTS[lang]["faq_title"], reply_markup=faq_menu_keyboard(lang))
+        return
+
+    if query.data == "faq_back_to_actions":
+        platform = context.user_data.get("platform", "pc")
+        await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=actions_keyboard(lang, platform))
+        return
+
+    if query.data.startswith("faq_"):
+        key = query.data.split("_", 1)[1]  # pc/android/iphone/ebook/button/ticket/time/pay/notwork
+        text = FAQ.get(lang, FAQ["fr"]).get(key, "FAQ indisponible.")
+        await query.edit_message_text(text, reply_markup=faq_answer_keyboard(lang))
         return
 
 # ====== MAIN ======
