@@ -11,10 +11,10 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v1.8"
-BOT_UPDATED = "14/02/2026"
+BOT_VERSION = "v1.9"
+BOT_UPDATED = "15/02/2026"
 
-SUPPORT_1_USERNAME = "dragonot005"
+SUPPORT_1_USERNAME = "Drago_JS"
 SUPPORT_2_USERNAME = "BruluxOnFlux"
 
 SCRIPT_LINK_DOCS = "https://docs.google.com/document/d/1Wwuxkzn8eRPadaykz419WK1l9yMPo8TJ7GKQwhE-ViE/edit?tab=t.0"
@@ -32,67 +32,58 @@ TECH_PDF_PC = {
     "refundall": "tech_refund.pdf",
 }
 
-# ✅ SQLite
 DB_FILE = "tickets.db"
-
-# Stats (clics)
 STATS_FILE = "stats.json"
 
 TEXTS = {
     "fr": {
-        "choose_lang": "Choisissez votre langue :",
         "choose_tech": "Choisis ton service :",
         "tech_amazon": "📦 Tech Amazon",
         "tech_apple": "🍎 Tech Apple",
         "tech_refundall": "🎁 Tech Refund All (PayPal, Rbnb, PCS…)",
+
         "choose_platform": "Choisis ta plateforme :",
         "pc": "💻 PC",
         "iphone": "🍎 iPhone",
         "android": "🤖 Android",
 
-        # ✅ PDF -> Ebook
         "btn_pdf": "📘 Ebook",
         "btn_video": "🎥 Vidéo",
         "btn_script": "📜 Lien du script",
-        "btn_support1": "🛠 Support Dragonot",
+        "btn_support1": "🛠 Support Drago",
         "btn_support2": "🛠 Support Brulux",
         "btn_back": "⬅ Retour",
         "btn_home": "🏠 Menu principal",
 
         "support_ready": "🎟 Ticket: {ticket}\nClique ci-dessous pour contacter le support :",
-
-        # ✅ message ebook
         "missing_file": "❌ Erreur : Ebook introuvable.",
-
         "open_support": "➡️ Ouvrir le support",
+
         "version_text": "🛠 *Version du bot*\n\n• Version: `{ver}`\n• Dernière MAJ: `{date}`",
     },
     "en": {
-        "choose_lang": "Please choose your language:",
         "choose_tech": "Choose your service:",
         "tech_amazon": "📦 Amazon Tech",
         "tech_apple": "🍎 Apple Tech",
         "tech_refundall": "🎁 Tech Refund All (PayPal, Rbnb, PCS…)",
+
         "choose_platform": "Choose your platform:",
         "pc": "💻 PC",
         "iphone": "🍎 iPhone",
         "android": "🤖 Android",
 
-        # ✅ PDF -> Ebook
         "btn_pdf": "📘 Ebook",
         "btn_video": "🎥 Video",
         "btn_script": "📜 Script Link",
-        "btn_support1": "🛠 Dragonot Support",
+        "btn_support1": "🛠 Drago Support",
         "btn_support2": "🛠 Brulux Support",
         "btn_back": "⬅ Back",
         "btn_home": "🏠 Main menu",
 
         "support_ready": "🎟 Ticket: {ticket}\nClick below to contact support:",
-
-        # ✅ message ebook
         "missing_file": "❌ Error: Ebook not found.",
-
         "open_support": "➡️ Open support",
+
         "version_text": "🛠 *Bot version*\n\n• Version: `{ver}`\n• Last update: `{date}`",
     }
 }
@@ -105,7 +96,7 @@ def start_text_dynamic():
     now = paris_now().strftime("%H:%M")
     return f"👋 Bienvenue ! Il est {now}.\n\nChoisissez votre langue :"
 
-# ====== SQLITE DB ======
+# ====== SQLITE (historique complet) ======
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -225,7 +216,7 @@ def get_user_identity(update):
     user = update.effective_user
     return f"@{user.username}" if user.username else f"User ID: {user.id}"
 
-def build_support_message(lang, tech_label, platform_label, update, ticket):
+def build_support_message(lang, tech_label, platform_label, update, ticket_str):
     now = paris_now()
     date_now = now.strftime("%d/%m/%Y")
     time_now = now.strftime("%H:%M")
@@ -234,7 +225,7 @@ def build_support_message(lang, tech_label, platform_label, update, ticket):
 
     if lang == "fr":
         return (
-            f"🎟 Ticket: {ticket}\n"
+            f"🎟 Ticket: {ticket_str}\n"
             f"{flag} Demande Support\n\n"
             f"Date: {date_now}\n"
             f"Heure: {time_now}\n\n"
@@ -244,7 +235,7 @@ def build_support_message(lang, tech_label, platform_label, update, ticket):
         )
     else:
         return (
-            f"🎟 Ticket: {ticket}\n"
+            f"🎟 Ticket: {ticket_str}\n"
             f"{flag} Support Request\n\n"
             f"Date: {date_now}\n"
             f"Time: {time_now}\n\n"
@@ -253,8 +244,8 @@ def build_support_message(lang, tech_label, platform_label, update, ticket):
             f"User: {identity}"
         )
 
-def build_support_url(username, lang, tech_label, platform_label, update, ticket):
-    msg = build_support_message(lang, tech_label, platform_label, update, ticket)
+def build_support_url(username, lang, tech_label, platform_label, update, ticket_str):
+    msg = build_support_message(lang, tech_label, platform_label, update, ticket_str)
     return f"https://t.me/{username}?text={urllib.parse.quote(msg)}"
 
 def get_or_create_active_ticket(context, update: Update, lang: str, tech_key: str, platform_key: str) -> str:
@@ -263,12 +254,14 @@ def get_or_create_active_ticket(context, update: Update, lang: str, tech_key: st
         return active["ticket_str"]
 
     user = update.effective_user
-    user_id = int(user.id)
-    username = user.username if user.username else None
-
-    ticket_id = create_ticket_in_db(user_id=user_id, username=username, lang=lang, tech=tech_key, platform=platform_key)
+    ticket_id = create_ticket_in_db(
+        user_id=int(user.id),
+        username=(user.username if user.username else None),
+        lang=lang,
+        tech=tech_key,
+        platform=platform_key
+    )
     ticket_str = f"{ticket_id:04d}"
-
     context.user_data["active_ticket"] = {
         "ticket_id": ticket_id,
         "ticket_str": ticket_str,
@@ -316,7 +309,7 @@ def actions_keyboard(lang, platform):
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_video"], url=VIDEO_LINKS[platform])])
 
     keyboard.append([
-        InlineKeyboardButton(TEXTS[lang]["btn_support1"], callback_data="support_dragonot"),
+        InlineKeyboardButton(TEXTS[lang]["btn_support1"], callback_data="support_drago"),
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], callback_data="support_brulux")
     ])
 
@@ -325,7 +318,9 @@ def actions_keyboard(lang, platform):
     return InlineKeyboardMarkup(keyboard)
 
 def simple_back_home(lang):
-    return InlineKeyboardMarkup([[InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")]])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")]
+    ])
 
 # ====== HANDLERS ======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -363,7 +358,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = get_lang(context)
 
-    # Langue -> Tech
     if query.data.startswith("lang_"):
         context.user_data["lang"] = query.data.split("_")[1]
         lang = context.user_data["lang"]
@@ -371,7 +365,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_tech"], reply_markup=tech_keyboard(lang))
         return
 
-    # Tech -> Plateforme
     if query.data.startswith("tech_"):
         tech_key = query.data.split("_")[1]
         context.user_data["tech"] = tech_key
@@ -380,7 +373,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # Plateforme -> Actions
     if query.data.startswith("platform_"):
         platform = query.data.split("_")[1]
         context.user_data["platform"] = platform
@@ -389,26 +381,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=actions_keyboard(lang, platform))
         return
 
-    # Retour plateformes
     if query.data == "step_platform":
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # Ebook PC (ex PDF)
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
-
         if not file_path or not os.path.exists(file_path):
             await query.message.reply_text(TEXTS[lang]["missing_file"])
             return
-
         with open(file_path, "rb") as f:
             await query.message.reply_document(f)
         return
 
-    # Support (ticket SQLite + historique complet)
-    if query.data in ("support_dragonot", "support_brulux"):
+    if query.data in ("support_drago", "support_brulux"):
         tech_key = context.user_data.get("tech", "refundall")
         platform_key = context.user_data.get("platform", "pc")
 
@@ -418,7 +405,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ticket_str = get_or_create_active_ticket(context, update, lang, tech_key, platform_key)
         inc_stat("support_requests")
 
-        if query.data == "support_dragonot":
+        if query.data == "support_drago":
             url = build_support_url(SUPPORT_1_USERNAME, lang, tech_label, platform_label, update, ticket_str)
         else:
             url = build_support_url(SUPPORT_2_USERNAME, lang, tech_label, platform_label, update, ticket_str)
