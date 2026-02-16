@@ -15,7 +15,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v2.3"
+BOT_VERSION = "v2.5"
 BOT_UPDATED = "16/02/2026"
 
 SUPPORT_1_USERNAME = "Drago_JS"
@@ -42,19 +42,24 @@ BLOCKCYPHER_TOKEN = "8fd629ba15ae4f09af62be248885c179"
 CHECK_INTERVAL = 300
 MONITOR_USER_ID = 7067411241
 
+# ====== LISTE DES ADMINS ======
+ADMIN_IDS = [7067411241, 6489634519]  # Ton ID + ID de Brulux
+
 # ====== STATUT SUPPORT ======
 SUPPORT_STAFF = {
     "drago": {
         "name": "Drago",
         "online": True,
         "message": "🟢 En ligne - Réponse rapide",
-        "updated_at": None
+        "updated_at": None,
+        "updated_by": None
     },
     "brulux": {
         "name": "Brulux",
         "online": True,
         "message": "🟢 En ligne - Réponse rapide",
-        "updated_at": None
+        "updated_at": None,
+        "updated_by": None
     }
 }
 
@@ -798,10 +803,11 @@ async def btc_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(message, parse_mode="Markdown")
 
-# ====== COMMANDES STATUT SUPPORT ======
+# ====== COMMANDES STATUT SUPPORT (EN FRANÇAIS) ======
 async def set_staff_status(update: Update, context: ContextTypes.DEFAULT_TYPE, staff: str, status: str):
     """Change le statut d'un support (admin only)"""
-    if update.effective_user.id != MONITOR_USER_ID:
+    # Vérifie que l'utilisateur est admin (toi ou Brulux)
+    if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("⛔ Commande réservée aux admins")
         return
     
@@ -816,35 +822,48 @@ async def set_staff_status(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     SUPPORT_STAFF[staff]["online"] = (status == "online")
     SUPPORT_STAFF[staff]["message"] = STATUS_TYPES[status]
     SUPPORT_STAFF[staff]["updated_at"] = datetime.now().strftime("%H:%M")
+    SUPPORT_STAFF[staff]["updated_by"] = update.effective_user.username or "Admin"
     
     await update.message.reply_text(
-        f"✅ {SUPPORT_STAFF[staff]['name']} est maintenant : {STATUS_TYPES[status]}"
+        f"✅ {SUPPORT_STAFF[staff]['name']} est maintenant : {STATUS_TYPES[status]}\n"
+        f"Mis à jour par : @{update.effective_user.username}"
     )
+    
+    # Notifier l'autre admin du changement
+    for admin_id in ADMIN_IDS:
+        if admin_id != update.effective_user.id:
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=f"📢 @{update.effective_user.username} a changé le statut de {SUPPORT_STAFF[staff]['name']} : {STATUS_TYPES[status]}"
+                )
+            except:
+                pass
 
-# Commandes pour Drago
-async def drago_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Commandes pour Drago (en français)
+async def drago_enligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "drago", "online")
 
-async def drago_busy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def drago_occupe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "drago", "busy")
 
-async def drago_offline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def drago_horsligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "drago", "offline")
 
-async def drago_break(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def drago_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "drago", "break")
 
-# Commandes pour Brulux
-async def brulux_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Commandes pour Brulux (en français)
+async def brulux_enligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "brulux", "online")
 
-async def brulux_busy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def brulux_occupe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "brulux", "busy")
 
-async def brulux_offline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def brulux_horsligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "brulux", "offline")
 
-async def brulux_break(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def brulux_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "brulux", "break")
 
 async def show_support_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -859,7 +878,10 @@ async def show_support_status(update: Update, context: ContextTypes.DEFAULT_TYPE
     for staff_id, staff in SUPPORT_STAFF.items():
         message += f"👤 **{staff['name']}** : {staff['message']}\n"
         if staff['updated_at']:
-            message += f"   └ Mis à jour à {staff['updated_at']}\n"
+            message += f"   └ Mis à jour à {staff['updated_at']}"
+            if staff['updated_by']:
+                message += f" par @{staff['updated_by']}"
+            message += "\n"
         message += "\n"
     
     message += "💡 *Conseil* : Contacte un support en ligne pour une réponse plus rapide !"
@@ -885,6 +907,20 @@ async def show_support_status(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
+
+async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Voir tous les statuts (pour les admins)"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    message = "📊 *Statut actuel des supports*\n\n"
+    for staff_id, staff in SUPPORT_STAFF.items():
+        message += f"👤 {staff['name']}: {staff['message']}\n"
+        if staff['updated_by']:
+            message += f"   └ Par: @{staff['updated_by']} à {staff['updated_at']}\n"
+        message += "\n"
+    
+    await update.message.reply_text(message, parse_mode="Markdown")
 
 # ====== HANDLERS PRINCIPAUX ======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1054,19 +1090,21 @@ if __name__ == "__main__":
         app.add_handler(CommandHandler("btcstatus", btc_status))
         app.add_handler(CommandHandler("btchistory", btc_history))
         
-        # Handlers statut support
-        app.add_handler(CommandHandler("drago_on", drago_online))
-        app.add_handler(CommandHandler("drago_busy", drago_busy))
-        app.add_handler(CommandHandler("drago_off", drago_offline))
-        app.add_handler(CommandHandler("drago_break", drago_break))
+        # Handlers statut support (en français)
+        app.add_handler(CommandHandler("drago_enligne", drago_enligne))
+        app.add_handler(CommandHandler("drago_occupe", drago_occupe))
+        app.add_handler(CommandHandler("drago_horsligne", drago_horsligne))
+        app.add_handler(CommandHandler("drago_pause", drago_pause))
         
-        app.add_handler(CommandHandler("brulux_on", brulux_online))
-        app.add_handler(CommandHandler("brulux_busy", brulux_busy))
-        app.add_handler(CommandHandler("brulux_off", brulux_offline))
-        app.add_handler(CommandHandler("brulux_break", brulux_break))
+        app.add_handler(CommandHandler("brulux_enligne", brulux_enligne))
+        app.add_handler(CommandHandler("brulux_occupe", brulux_occupe))
+        app.add_handler(CommandHandler("brulux_horsligne", brulux_horsligne))
+        app.add_handler(CommandHandler("brulux_pause", brulux_pause))
+        
+        app.add_handler(CommandHandler("adminstatut", admin_status))
         
         print("🚀 Bot démarré avec monitoring BTC et statut support")
-        print(f"👤 Tes notifications BTC seront envoyées à l'ID: {MONITOR_USER_ID}")
+        print(f"👤 Admins: toi (7067411241) et Brulux (6489634519)")
         print(f"💰 Adresse BTC surveillée: {BTC_ADDRESS}")
-        print(f"📊 Statut support disponible pour Drago et Brulux")
+        print(f"📊 Commandes statut en français disponibles")
         app.run_polling()
