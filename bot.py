@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 from typing import Optional
 import asyncio
 import aiohttp
-import time
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -16,8 +15,8 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v1.4"
-BOT_UPDATED = "14/02/2026"
+BOT_VERSION = "v2.3"
+BOT_UPDATED = "16/02/2026"
 
 SUPPORT_1_USERNAME = "Drago_JS"
 SUPPORT_2_USERNAME = "BruluxOnFlux"
@@ -37,11 +36,34 @@ TECH_PDF_PC = {
     "refundall": "tech_refund.pdf",
 }
 
-# ====== TES INFORMATIONS PERSONNELLES ======
-BTC_ADDRESS = "bc1qruhf3catg68eaq2trnw5ykfgr8hy3mlf8rn068"  # ✅ TON ADRESSE BTC
-BLOCKCYPHER_TOKEN = "8fd629ba15ae4f09af62be248885c179"  # ✅ TON TOKEN BLOCKCYPHER
-CHECK_INTERVAL = 300  # Vérification toutes les 5 minutes
-MONITOR_USER_ID = 7067411241  # ✅ TON ID TELEGRAM
+# ====== CONFIG CRYPTO ======
+BTC_ADDRESS = "bc1qruhf3catg68eaq2trnw5ykfgr8hy3mlf8rn068"
+BLOCKCYPHER_TOKEN = "8fd629ba15ae4f09af62be248885c179"
+CHECK_INTERVAL = 300
+MONITOR_USER_ID = 7067411241
+
+# ====== STATUT SUPPORT ======
+SUPPORT_STAFF = {
+    "drago": {
+        "name": "Drago",
+        "online": True,
+        "message": "🟢 En ligne - Réponse rapide",
+        "updated_at": None
+    },
+    "brulux": {
+        "name": "Brulux",
+        "online": True,
+        "message": "🟢 En ligne - Réponse rapide",
+        "updated_at": None
+    }
+}
+
+STATUS_TYPES = {
+    "online": "🟢 En ligne - Réponse rapide",
+    "busy": "🟡 Occupé - Réponse sous 1h",
+    "offline": "🔴 Hors ligne - Réponse sous 24h",
+    "break": "☕ En pause - Reviens dans 30 min"
+}
 
 DB_FILE = "tickets.db"
 STATS_FILE = "stats.json"
@@ -115,7 +137,7 @@ def start_text_dynamic():
     now = paris_now().strftime("%H:%M")
     return f"👋 Bienvenue ! Il est {now}.\n\nPlease choose your language / Choisissez votre langue :"
 
-# ====== SQLITE (historique complet) ======
+# ====== SQLITE ======
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -181,7 +203,7 @@ def total_tickets_db() -> int:
     conn.close()
     return int(total)
 
-# ====== STATS (clics) ======
+# ====== STATS ======
 def _default_stats():
     return {
         "support_requests": 0,
@@ -380,12 +402,14 @@ def actions_keyboard(lang, platform):
 
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_video"], url=VIDEO_LINKS[platform])])
 
+    # BOUTON STATUT SUPPORT
+    keyboard.append([InlineKeyboardButton("📊 Statut du support", callback_data="show_support_status")])
+
     keyboard.append([
         InlineKeyboardButton(TEXTS[lang]["btn_support1"], callback_data="support_drago"),
         InlineKeyboardButton(TEXTS[lang]["btn_support2"], callback_data="support_brulux")
     ])
 
-    # ✅ FAQ
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_faq"], callback_data="faq_menu")])
 
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")])
@@ -396,7 +420,6 @@ def simple_back_home(lang):
     return InlineKeyboardMarkup([[InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")]])
 
 def faq_menu_keyboard(lang):
-    # menu FAQ complet, avec bouton support DragoJS
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💻 PC (Edge)", callback_data="faq_pc")],
         [InlineKeyboardButton("🤖 Android (Firefox)", callback_data="faq_android")],
@@ -407,7 +430,6 @@ def faq_menu_keyboard(lang):
         [InlineKeyboardButton("⏳ Délai", callback_data="faq_time")],
         [InlineKeyboardButton("💳 Paiement", callback_data="faq_pay")],
         [InlineKeyboardButton("⚠️ Ça marche pas", callback_data="faq_notwork")],
-        # Nouveau bouton support DragoJS
         [InlineKeyboardButton("🛠 Support DragoJS", callback_data="faq_support_drago")],
         [InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="faq_back_to_actions")],
     ])
@@ -418,7 +440,7 @@ def faq_answer_keyboard(lang):
         [InlineKeyboardButton(TEXTS[lang]["btn_home"], callback_data="go_home")],
     ])
 
-# ====== BTC MONITORING CLASS ======
+# ====== BTC MONITORING ======
 class BTCAddressMonitor:
     def __init__(self, address: str, token: str, user_id: int, bot):
         self.address = address
@@ -428,10 +450,9 @@ class BTCAddressMonitor:
         self.last_balance = 0
         self.base_url = "https://api.blockcypher.com/v1/btc/main"
         self.running = False
-        self.notification_levels = [0, 1, 3, 6, 12]  # Notifications à 0,1,3,6,12 confirmations
+        self.notification_levels = [0, 1, 3, 6, 12]
         
     async def get_address_info(self):
-        """Récupère les infos de l'adresse"""
         url = f"{self.base_url}/addrs/{self.address}/balance"
         params = {"token": self.token}
         
@@ -448,7 +469,6 @@ class BTCAddressMonitor:
             return None
     
     async def get_transactions(self, limit: int = 10):
-        """Récupère les dernières transactions"""
         url = f"{self.base_url}/addrs/{self.address}"
         params = {
             "token": self.token,
@@ -468,16 +488,13 @@ class BTCAddressMonitor:
             return None
     
     def satoshi_to_btc(self, satoshi: int) -> float:
-        """Convertit les satoshis en BTC"""
         return satoshi / 100_000_000
     
     def format_amount(self, satoshi: int) -> str:
-        """Formate le montant en BTC"""
         btc = self.satoshi_to_btc(satoshi)
         return f"{btc:.8f} BTC"
     
     def get_notified_levels(self, tx_hash: str) -> list:
-        """Récupère les niveaux déjà notifiés pour une transaction"""
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
         cur.execute(
@@ -492,7 +509,6 @@ class BTCAddressMonitor:
         return []
     
     def update_notified_levels(self, tx_hash: str, levels: list):
-        """Met à jour les niveaux notifiés"""
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
         cur.execute(
@@ -503,11 +519,9 @@ class BTCAddressMonitor:
         conn.close()
     
     def save_transaction(self, tx_hash: str, amount_sat: int, confirmations: int):
-        """Sauvegarde une transaction"""
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
         
-        # Vérifier si la transaction existe déjà
         cur.execute(
             "SELECT confirmations, notified_levels FROM btc_transactions WHERE tx_hash = ?",
             (tx_hash,)
@@ -517,7 +531,6 @@ class BTCAddressMonitor:
         now = datetime.now().isoformat()
         
         if existing:
-            # Mise à jour
             cur.execute(
                 """UPDATE btc_transactions 
                    SET confirmations = ?, last_notified = ? 
@@ -525,7 +538,6 @@ class BTCAddressMonitor:
                 (confirmations, now if confirmations > existing[0] else None, tx_hash)
             )
         else:
-            # Nouvelle transaction
             cur.execute(
                 """INSERT INTO btc_transactions 
                    (tx_hash, address, amount_sat, confirmations, first_seen, notified_levels)
@@ -537,7 +549,6 @@ class BTCAddressMonitor:
         conn.close()
     
     def save_balance_snapshot(self, balance_sat: int, total_received: int, total_sent: int):
-        """Sauvegarde un snapshot du solde"""
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
         cur.execute(
@@ -550,7 +561,6 @@ class BTCAddressMonitor:
         conn.close()
     
     async def send_notification(self, message: str, parse_mode: str = "Markdown"):
-        """Envoie une notification à l'utilisateur"""
         try:
             await self.bot.send_message(
                 chat_id=self.user_id,
@@ -562,9 +572,7 @@ class BTCAddressMonitor:
             logging.error(f"Erreur envoi notification: {e}")
     
     async def check_notifications(self):
-        """Vérifie les transactions et envoie les notifications"""
         try:
-            # Récupérer les infos de l'adresse
             info = await self.get_address_info()
             if not info:
                 return
@@ -573,12 +581,10 @@ class BTCAddressMonitor:
             total_received = info.get('total_received', 0)
             total_sent = info.get('total_sent', 0)
             
-            # Sauvegarder snapshot si le solde a changé
             if balance != self.last_balance:
                 self.save_balance_snapshot(balance, total_received, total_sent)
                 self.last_balance = balance
             
-            # Récupérer les transactions récentes
             txs_data = await self.get_transactions(limit=5)
             if not txs_data or 'txs' not in txs_data:
                 return
@@ -587,22 +593,17 @@ class BTCAddressMonitor:
                 tx_hash = tx['hash']
                 confirmations = tx.get('confirmations', 0)
                 
-                # Calculer le montant reçu
                 amount_sat = 0
                 for output in tx.get('outputs', []):
                     if output.get('addresses') and self.address in output['addresses']:
                         amount_sat += output.get('value', 0)
                 
                 if amount_sat > 0:
-                    # Sauvegarder/update la transaction
                     self.save_transaction(tx_hash, amount_sat, confirmations)
                     
-                    # Vérifier les niveaux de notification
                     notified_levels = self.get_notified_levels(tx_hash)
                     
-                    # Nouvelle transaction non notifiée
                     if not notified_levels:
-                        # Notification initiale
                         btc_amount = self.format_amount(amount_sat)
                         tx_url = f"https://www.blockchain.com/btc/tx/{tx_hash}"
                         
@@ -616,13 +617,11 @@ class BTCAddressMonitor:
                         await self.send_notification(message)
                         notified_levels = [confirmations]
                     
-                    # Vérifier les nouveaux paliers de confirmation
                     for level in self.notification_levels:
                         if confirmations >= level and level not in notified_levels:
                             btc_amount = self.format_amount(amount_sat)
                             tx_url = f"https://www.blockchain.com/btc/tx/{tx_hash}"
                             
-                            # Message différent selon le niveau
                             if level == 0:
                                 msg_type = "🕐 Transaction détectée"
                             elif level == 1:
@@ -643,18 +642,15 @@ class BTCAddressMonitor:
                             await self.send_notification(message)
                             notified_levels.append(level)
                     
-                    # Mettre à jour les niveaux notifiés
                     self.update_notified_levels(tx_hash, notified_levels)
         
         except Exception as e:
             logging.error(f"Erreur dans check_notifications: {e}")
     
     async def run(self):
-        """Boucle principale de monitoring"""
         self.running = True
         logging.info(f"🚀 Monitoring BTC démarré pour l'adresse {self.address}")
         
-        # Notification de démarrage
         await self.send_notification(
             f"🚀 *Monitoring BTC activé*\n\n"
             f"Adresse: `{self.address}`\n"
@@ -667,20 +663,16 @@ class BTCAddressMonitor:
                 await asyncio.sleep(CHECK_INTERVAL)
             except Exception as e:
                 logging.error(f"Erreur boucle monitoring: {e}")
-                await asyncio.sleep(60)  # Attendre 1 minute en cas d'erreur
+                await asyncio.sleep(60)
     
     def stop(self):
-        """Arrête le monitoring"""
         self.running = False
         logging.info("🛑 Monitoring BTC arrêté")
 
-# Instance globale du monitor
 btc_monitor = None
 
 # ====== COMMANDES BTC ======
 async def start_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Démarrer le monitoring (commande privée)"""
-    # Vérifier que c'est bien toi
     if update.effective_user.id != MONITOR_USER_ID:
         await update.message.reply_text("⛔ Commande non autorisée")
         return
@@ -690,7 +682,6 @@ async def start_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📊 Monitoring déjà actif")
         return
     
-    # Créer et démarrer le monitor
     btc_monitor = BTCAddressMonitor(
         address=BTC_ADDRESS,
         token=BLOCKCYPHER_TOKEN,
@@ -698,7 +689,6 @@ async def start_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot=context.bot
     )
     
-    # Démarrer en arrière-plan
     asyncio.create_task(btc_monitor.run())
     
     await update.message.reply_text(
@@ -710,7 +700,6 @@ async def start_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def stop_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Arrêter le monitoring"""
     if update.effective_user.id != MONITOR_USER_ID:
         return
     
@@ -723,14 +712,12 @@ async def stop_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📊 Aucun monitoring actif")
 
 async def btc_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Voir le statut du monitoring et dernières transactions"""
     if update.effective_user.id != MONITOR_USER_ID:
         return
     
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     
-    # Dernières transactions
     cur.execute("""
         SELECT tx_hash, amount_sat, confirmations, first_seen 
         FROM btc_transactions 
@@ -741,7 +728,6 @@ async def btc_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     txs = cur.fetchall()
     
-    # Dernier snapshot de balance
     cur.execute("""
         SELECT balance_sat, timestamp 
         FROM btc_balance_history 
@@ -774,7 +760,6 @@ async def btc_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode="Markdown")
 
 async def btc_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Voir l'historique complet des transactions"""
     if update.effective_user.id != MONITOR_USER_ID:
         return
     
@@ -806,7 +791,6 @@ async def btc_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     message += f"\n*Total reçu:* `{total_received:.8f} BTC`"
     
-    # Si le message est trop long, envoyer en plusieurs parties
     if len(message) > 4000:
         parts = [message[i:i+4000] for i in range(0, len(message), 4000)]
         for part in parts:
@@ -814,7 +798,95 @@ async def btc_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(message, parse_mode="Markdown")
 
-# ====== HANDLERS ======
+# ====== COMMANDES STATUT SUPPORT ======
+async def set_staff_status(update: Update, context: ContextTypes.DEFAULT_TYPE, staff: str, status: str):
+    """Change le statut d'un support (admin only)"""
+    if update.effective_user.id != MONITOR_USER_ID:
+        await update.message.reply_text("⛔ Commande réservée aux admins")
+        return
+    
+    if staff not in SUPPORT_STAFF:
+        await update.message.reply_text("❌ Support inconnu")
+        return
+    
+    if status not in STATUS_TYPES:
+        await update.message.reply_text("❌ Statut inconnu")
+        return
+    
+    SUPPORT_STAFF[staff]["online"] = (status == "online")
+    SUPPORT_STAFF[staff]["message"] = STATUS_TYPES[status]
+    SUPPORT_STAFF[staff]["updated_at"] = datetime.now().strftime("%H:%M")
+    
+    await update.message.reply_text(
+        f"✅ {SUPPORT_STAFF[staff]['name']} est maintenant : {STATUS_TYPES[status]}"
+    )
+
+# Commandes pour Drago
+async def drago_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "online")
+
+async def drago_busy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "busy")
+
+async def drago_offline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "offline")
+
+async def drago_break(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "break")
+
+# Commandes pour Brulux
+async def brulux_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "online")
+
+async def brulux_busy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "busy")
+
+async def brulux_offline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "offline")
+
+async def brulux_break(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "break")
+
+async def show_support_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Affiche le statut de Drago et Brulux"""
+    query = update.callback_query
+    await query.answer()
+    
+    lang = get_lang(context)
+    
+    message = "📊 *Statut du support*\n\n"
+    
+    for staff_id, staff in SUPPORT_STAFF.items():
+        message += f"👤 **{staff['name']}** : {staff['message']}\n"
+        if staff['updated_at']:
+            message += f"   └ Mis à jour à {staff['updated_at']}\n"
+        message += "\n"
+    
+    message += "💡 *Conseil* : Contacte un support en ligne pour une réponse plus rapide !"
+    
+    keyboard = []
+    
+    drago_status = "🟢" if SUPPORT_STAFF["drago"]["online"] else "🔴"
+    keyboard.append([InlineKeyboardButton(
+        f"{drago_status} Contacter Drago", 
+        callback_data="support_drago"
+    )])
+    
+    brulux_status = "🟢" if SUPPORT_STAFF["brulux"]["online"] else "🔴"
+    keyboard.append([InlineKeyboardButton(
+        f"{brulux_status} Contacter Brulux", 
+        callback_data="support_brulux"
+    )])
+    
+    keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="go_home")])
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+# ====== HANDLERS PRINCIPAUX ======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(start_text_dynamic(), reply_markup=lang_keyboard())
 
@@ -846,6 +918,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "show_stats":
         await show_stats(update, context)
+        return
+    
+    if query.data == "show_support_status":
+        await show_support_status(update, context)
         return
 
     lang = get_lang(context)
@@ -880,7 +956,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(TEXTS[lang]["choose_platform"], reply_markup=platform_keyboard(lang))
         return
 
-    # ====== Ebook (PC only) ======
+    # ====== Ebook ======
     if query.data == "send_pdf_pc":
         tech = context.user_data.get("tech", "refundall")
         file_path = TECH_PDF_PC.get(tech)
@@ -963,26 +1039,34 @@ if __name__ == "__main__":
         print("ERREUR : TELEGRAM_TOKEN manquant !")
         print("👉 Vérifie que la variable d'environnement est bien configurée sur Railway")
     else:
-        # Initialiser les bases de données
         init_db()
         init_crypto_db()
         
-        # Créer l'application
         app = Application.builder().token(TOKEN).build()
         
         # Handlers principaux
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CallbackQueryHandler(button_handler))
         
-        # Handlers BTC (privés)
+        # Handlers BTC
         app.add_handler(CommandHandler("startbtc", start_monitoring))
         app.add_handler(CommandHandler("stopbtc", stop_monitoring))
         app.add_handler(CommandHandler("btcstatus", btc_status))
         app.add_handler(CommandHandler("btchistory", btc_history))
         
-        # Démarrer le bot
-        print("🚀 Bot démarré avec monitoring BTC")
+        # Handlers statut support
+        app.add_handler(CommandHandler("drago_on", drago_online))
+        app.add_handler(CommandHandler("drago_busy", drago_busy))
+        app.add_handler(CommandHandler("drago_off", drago_offline))
+        app.add_handler(CommandHandler("drago_break", drago_break))
+        
+        app.add_handler(CommandHandler("brulux_on", brulux_online))
+        app.add_handler(CommandHandler("brulux_busy", brulux_busy))
+        app.add_handler(CommandHandler("brulux_off", brulux_offline))
+        app.add_handler(CommandHandler("brulux_break", brulux_break))
+        
+        print("🚀 Bot démarré avec monitoring BTC et statut support")
         print(f"👤 Tes notifications BTC seront envoyées à l'ID: {MONITOR_USER_ID}")
         print(f"💰 Adresse BTC surveillée: {BTC_ADDRESS}")
-        print(f"🔑 Token BlockCypher configuré: {BLOCKCYPHER_TOKEN[:10]}...")
+        print(f"📊 Statut support disponible pour Drago et Brulux")
         app.run_polling()
