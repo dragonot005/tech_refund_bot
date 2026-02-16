@@ -15,7 +15,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v2.6"
+BOT_VERSION = "v2.9"
 BOT_UPDATED = "16/02/2026"
 
 SUPPORT_1_USERNAME = "Drago_JS"
@@ -407,7 +407,7 @@ def actions_keyboard(lang, platform):
 
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_video"], url=VIDEO_LINKS[platform])])
 
-    # BOUTON STATUT SUPPORT
+    # BOUTON STATUT SUPPORT - callback_data correct
     keyboard.append([InlineKeyboardButton("📊 Statut du support", callback_data="show_support_status")])
 
     keyboard.append([
@@ -1133,10 +1133,11 @@ if __name__ == "__main__":
         
         app.add_handler(CommandHandler("adminstatut", admin_status))
         
-        print("🚀 Bot démarré avec monitoring BTC et statut support (corrigé)")
+        print("🚀 Bot démarré avec monitoring BTC et statut support")
         print(f"👤 Admins: toi (7067411241) et Brulux (6489634519)")
         print(f"💰 Adresse BTC surveillée: {BTC_ADDRESS}")
         print(f"📊 Commandes statut en français disponibles")
         print(f"🔒 Règles: Toi seul peux modifier le statut de Brulux")
-        print(f"🔄 Bouton Rafraîchir ajouté - Le bouton statut fonctionne maintenant !")
+        print(f"🔄 Bouton Rafraîchir ajouté")
+        print(f"✅ Le bouton Statut du support fonctionne maintenant !")
         app.run_polling()
