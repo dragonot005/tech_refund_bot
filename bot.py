@@ -15,7 +15,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ====== CONFIG ======
-BOT_VERSION = "v2.5"
+BOT_VERSION = "v2.6"
 BOT_UPDATED = "16/02/2026"
 
 SUPPORT_1_USERNAME = "Drago_JS"
@@ -803,10 +803,10 @@ async def btc_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(message, parse_mode="Markdown")
 
-# ====== COMMANDES STATUT SUPPORT (EN FRANÇAIS) ======
+# ====== COMMANDES STATUT SUPPORT (AVEC RÈGLES SPÉCIALES) ======
 async def set_staff_status(update: Update, context: ContextTypes.DEFAULT_TYPE, staff: str, status: str):
     """Change le statut d'un support (admin only)"""
-    # Vérifie que l'utilisateur est admin (toi ou Brulux)
+    # Vérifie que l'utilisateur est admin
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("⛔ Commande réservée aux admins")
         return
@@ -819,17 +819,40 @@ async def set_staff_status(update: Update, context: ContextTypes.DEFAULT_TYPE, s
         await update.message.reply_text("❌ Statut inconnu")
         return
     
+    # ===== RÈGLES SPÉCIALES =====
+    # - Toi (7067411241) peux changer le statut de tout le monde
+    # - Brulux (6489634519) peut seulement changer son propre statut
+    
+    if staff == "brulux" and update.effective_user.id == 6489634519:
+        # Brulux change son propre statut → OK
+        pass
+    elif staff == "brulux" and update.effective_user.id == 7067411241:
+        # Toi tu changes le statut de Brulux → OK (même s'il est absent)
+        pass
+    elif staff == "drago" and update.effective_user.id == 7067411241:
+        # Toi tu changes ton propre statut → OK
+        pass
+    elif staff == "drago" and update.effective_user.id == 6489634519:
+        # Brulux essaie de changer le statut de Drago → NON autorisé
+        await update.message.reply_text("⛔ Tu ne peux changer que ton propre statut (Brulux)")
+        return
+    else:
+        # Autres cas (normalement jamais)
+        pass
+    
+    # Applique le changement
     SUPPORT_STAFF[staff]["online"] = (status == "online")
     SUPPORT_STAFF[staff]["message"] = STATUS_TYPES[status]
     SUPPORT_STAFF[staff]["updated_at"] = datetime.now().strftime("%H:%M")
     SUPPORT_STAFF[staff]["updated_by"] = update.effective_user.username or "Admin"
     
+    # Message de confirmation
     await update.message.reply_text(
         f"✅ {SUPPORT_STAFF[staff]['name']} est maintenant : {STATUS_TYPES[status]}\n"
         f"Mis à jour par : @{update.effective_user.username}"
     )
     
-    # Notifier l'autre admin du changement
+    # Notifier l'autre admin si ce n'est pas lui qui a fait le changement
     for admin_id in ADMIN_IDS:
         if admin_id != update.effective_user.id:
             try:
@@ -866,8 +889,9 @@ async def brulux_horsligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def brulux_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "brulux", "break")
 
+# ====== FONCTION CORRIGÉE POUR AFFICHER LE STATUT ======
 async def show_support_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Affiche le statut de Drago et Brulux"""
+    """Affiche le statut de Drago et Brulux (version corrigée)"""
     query = update.callback_query
     await query.answer()
     
@@ -888,18 +912,22 @@ async def show_support_status(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     keyboard = []
     
+    # Récupère les statuts en direct
     drago_status = "🟢" if SUPPORT_STAFF["drago"]["online"] else "🔴"
+    brulux_status = "🟢" if SUPPORT_STAFF["brulux"]["online"] else "🔴"
+    
     keyboard.append([InlineKeyboardButton(
         f"{drago_status} Contacter Drago", 
         callback_data="support_drago"
     )])
     
-    brulux_status = "🟢" if SUPPORT_STAFF["brulux"]["online"] else "🔴"
     keyboard.append([InlineKeyboardButton(
         f"{brulux_status} Contacter Brulux", 
         callback_data="support_brulux"
     )])
     
+    # Bouton pour rafraîchir
+    keyboard.append([InlineKeyboardButton("🔄 Rafraîchir", callback_data="show_support_status")])
     keyboard.append([InlineKeyboardButton(TEXTS[lang]["btn_back"], callback_data="go_home")])
     
     await query.edit_message_text(
@@ -1103,8 +1131,10 @@ if __name__ == "__main__":
         
         app.add_handler(CommandHandler("adminstatut", admin_status))
         
-        print("🚀 Bot démarré avec monitoring BTC et statut support")
+        print("🚀 Bot démarré avec monitoring BTC et statut support (corrigé)")
         print(f"👤 Admins: toi (7067411241) et Brulux (6489634519)")
         print(f"💰 Adresse BTC surveillée: {BTC_ADDRESS}")
         print(f"📊 Commandes statut en français disponibles")
+        print(f"🔒 Règles: Toi seul peux modifier le statut de Brulux")
+        print(f"🔄 Bouton Rafraîchir ajouté pour corriger le bug d'affichage")
         app.run_polling()
