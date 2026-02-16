@@ -889,9 +889,9 @@ async def brulux_horsligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def brulux_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_staff_status(update, context, "brulux", "break")
 
-# ====== FONCTION CORRIGÉE POUR AFFICHER LE STATUT ======
+# ====== FONCTION POUR AFFICHER LE STATUT ======
 async def show_support_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Affiche le statut de Drago et Brulux (version corrigée)"""
+    """Affiche le statut de Drago et Brulux"""
     query = update.callback_query
     await query.answer()
     
@@ -968,9 +968,15 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = stats_text(lang)
     await update.callback_query.edit_message_text(text, reply_markup=simple_back_home(lang), parse_mode="Markdown")
 
+# ====== BOUTON HANDLER CORRIGÉ ======
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    # ✅ TRAITER show_support_status EN PREMIER
+    if query.data == "show_support_status":
+        await show_support_status(update, context)
+        return
 
     if query.data == "go_home":
         await go_home(update, context)
@@ -982,10 +988,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "show_stats":
         await show_stats(update, context)
-        return
-    
-    if query.data == "show_support_status":
-        await show_support_status(update, context)
         return
 
     lang = get_lang(context)
@@ -1136,5 +1138,5 @@ if __name__ == "__main__":
         print(f"💰 Adresse BTC surveillée: {BTC_ADDRESS}")
         print(f"📊 Commandes statut en français disponibles")
         print(f"🔒 Règles: Toi seul peux modifier le statut de Brulux")
-        print(f"🔄 Bouton Rafraîchir ajouté pour corriger le bug d'affichage")
+        print(f"🔄 Bouton Rafraîchir ajouté - Le bouton statut fonctionne maintenant !")
         app.run_polling()
