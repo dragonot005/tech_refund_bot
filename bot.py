@@ -14,6 +14,10 @@ BOT_UPDATED = "14/02/2026"
 SUPPORT_1_USERNAME = "Drago_JS"
 SUPPORT_2_USERNAME = "BruluxOnFlux"
 
+# ====== ID ADMIN ======
+MONITOR_USER_ID = 7067411241  # Ton ID
+ADMIN_IDS = [7067411241, 6489634519]  # Toi et Brulux
+
 # ====== STATUT SUPPORT ======
 SUPPORT_STAFF = {
     "drago": {
@@ -32,6 +36,13 @@ SUPPORT_STAFF = {
     }
 }
 
+STATUS_TYPES = {
+    "online": "🟢 En ligne - Réponse rapide",
+    "busy": "🟡 Occupé - Réponse sous 1h",
+    "offline": "🔴 Hors ligne - Réponse sous 24h",
+    "pause": "☕ En pause - Reviens dans 30 min"
+}
+
 # ====== TIME ======
 def paris_now():
     return datetime.now(ZoneInfo("Europe/Paris"))
@@ -45,7 +56,74 @@ def main_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ====== HANDLERS ======
+# ====== COMMANDES POUR CHANGER LES STATUTS ======
+async def set_staff_status(update: Update, context: ContextTypes.DEFAULT_TYPE, staff: str, status: str):
+    """Change le statut d'un support"""
+    # Vérifie que l'utilisateur est admin
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Commande réservée aux admins")
+        return
+    
+    if staff not in SUPPORT_STAFF:
+        await update.message.reply_text("❌ Support inconnu")
+        return
+    
+    if status not in STATUS_TYPES:
+        await update.message.reply_text("❌ Statut inconnu")
+        return
+    
+    # Règles : seul toi peut modifier Brulux
+    if staff == "brulux" and update.effective_user.id == 6489634519:
+        # Brulux change son propre statut
+        pass
+    elif staff == "brulux" and update.effective_user.id == 7067411241:
+        # Toi changes le statut de Brulux
+        pass
+    elif staff == "drago" and update.effective_user.id == 7067411241:
+        # Toi changes ton propre statut
+        pass
+    elif staff == "drago" and update.effective_user.id == 6489634519:
+        await update.message.reply_text("⛔ Tu ne peux changer que ton propre statut")
+        return
+    
+    # Applique le changement
+    SUPPORT_STAFF[staff]["online"] = (status == "online")
+    SUPPORT_STAFF[staff]["message"] = STATUS_TYPES[status]
+    SUPPORT_STAFF[staff]["updated_at"] = paris_now().strftime("%H:%M")
+    SUPPORT_STAFF[staff]["updated_by"] = update.effective_user.username or "Admin"
+    
+    await update.message.reply_text(
+        f"✅ {SUPPORT_STAFF[staff]['name']} est maintenant : {STATUS_TYPES[status]}\n"
+        f"Mis à jour par : @{update.effective_user.username}"
+    )
+
+# Commandes pour Drago
+async def drago_enligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "online")
+
+async def drago_occupe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "busy")
+
+async def drago_horsligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "offline")
+
+async def drago_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "drago", "pause")
+
+# Commandes pour Brulux
+async def brulux_enligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "online")
+
+async def brulux_occupe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "busy")
+
+async def brulux_horsligne(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "offline")
+
+async def brulux_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_staff_status(update, context, "brulux", "pause")
+
+# ====== HANDLERS DES BOUTONS ======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Bienvenue ! Choisis une option :",
@@ -53,20 +131,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def show_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Affiche le statut des supports"""
+    """Affiche le statut des supports (version qui fonctionne)"""
     query = update.callback_query
     await query.answer()
     
+    # 🔥 IMPORTANT: On lit les données à jour dans SUPPORT_STAFF
     message = "📊 *Statut du support*\n\n"
     
     for staff_id, staff in SUPPORT_STAFF.items():
-        message += f"👤 **{staff['name']}** : {staff['message']}\n\n"
+        message += f"👤 **{staff['name']}** : {staff['message']}\n"
+        if staff['updated_at']:
+            message += f"   └ Mis à jour à {staff['updated_at']}"
+            if staff['updated_by']:
+                message += f" par @{staff['updated_by']}"
+            message += "\n"
+        message += "\n"
     
     message += "💡 Clique sur un support pour contacter :"
     
+    # Récupère les statuts actuels pour les emojis
+    drago_emoji = "🟢" if SUPPORT_STAFF["drago"]["online"] else "🔴"
+    brulux_emoji = "🟢" if SUPPORT_STAFF["brulux"]["online"] else "🔴"
+    
     keyboard = [
-        [InlineKeyboardButton("🟢 Contacter Drago", callback_data="support_drago")],
-        [InlineKeyboardButton("🟢 Contacter Brulux", callback_data="support_brulux")],
+        [InlineKeyboardButton(f"{drago_emoji} Contacter Drago", callback_data="support_drago")],
+        [InlineKeyboardButton(f"{brulux_emoji} Contacter Brulux", callback_data="support_brulux")],
         [InlineKeyboardButton("🔄 Rafraîchir", callback_data="refresh_status")],
         [InlineKeyboardButton("⬅ Retour", callback_data="back_main")]
     ]
@@ -149,9 +238,28 @@ if __name__ == "__main__":
     
     app = Application.builder().token(TOKEN).build()
     
+    # Commandes de démarrage
     app.add_handler(CommandHandler("start", start))
+    
+    # Commandes pour changer les statuts
+    app.add_handler(CommandHandler("drago_enligne", drago_enligne))
+    app.add_handler(CommandHandler("drago_occupe", drago_occupe))
+    app.add_handler(CommandHandler("drago_horsligne", drago_horsligne))
+    app.add_handler(CommandHandler("drago_pause", drago_pause))
+    
+    app.add_handler(CommandHandler("brulux_enligne", brulux_enligne))
+    app.add_handler(CommandHandler("brulux_occupe", brulux_occupe))
+    app.add_handler(CommandHandler("brulux_horsligne", brulux_horsligne))
+    app.add_handler(CommandHandler("brulux_pause", brulux_pause))
+    
+    # Gestionnaire des boutons
     app.add_handler(CallbackQueryHandler(button_handler))
     
-    print("🚀 Bot de test démarré")
-    print("✅ Teste le bouton 'Statut du support'")
+    print("🚀 Bot démarré avec gestion des statuts")
+    print(f"👤 Admins: toi (7067411241) et Brulux (6489634519)")
+    print("✅ Commandes disponibles :")
+    print("   /drago_enligne, /drago_occupe, /drago_horsligne, /drago_pause")
+    print("   /brulux_enligne, /brulux_occupe, /brulux_horsligne, /brulux_pause")
+    print("✅ Le bouton Statut du support fonctionne après chaque changement !")
+    
     app.run_polling()
